@@ -1,0 +1,25 @@
+{
+  "name": "quakejs",
+  "version": "0.0.1",
+  "bin": {
+    "quakejs-content": "bin/content.js",
+    "quakejs-master": "bin/master.js",
+    "quakejs-repak": "bin/repak.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/inolen/quakejs.git"
+  },
+  "author": "Anthony Pesch",
+  "license": "MIT",
+  "readmeFilename": "README.md",
+  "dependencies": {
+    "archiver": "~0.4.6",
+    "async": "~0.2.9",
+    "execSync": "~1.0.1-pre",
+    "quakejs-files": "0.0.1",
+    "temp": "~0.5.1",
+    "unzip": "git://github.com/nearinfinity/node-unzip.git#max-call-stack-exceeded-wip",
+    "quakejs-repak": "0.0.1"
+  }
+}
