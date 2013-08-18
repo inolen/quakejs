@@ -1,0 +1,3 @@
+[submodule "ioq3"]
+	path = ioq3
+	url = git://github.com/inolen/ioq3.git
