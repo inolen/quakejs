@@ -23,6 +23,7 @@
     "quakejs-repak": "0.0.1",
     "underscore": "~1.5.1",
     "express": "~3.3.5",
-    "optimist": "~0.6.0"
+    "optimist": "~0.6.0",
+    "ejs": "~0.8.4"
   }
 }
