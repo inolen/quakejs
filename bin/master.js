@@ -14,7 +14,7 @@ var argv = require('optimist')
 		},
 		'port': {
 			'description': 'Server port',
-			'default': 9000
+			'default': 45735
 		}
 	})
 	.argv;
