@@ -7,9 +7,13 @@ var http = require('http');
 var opt = require('optimist');
 var path = require('path');
 // var Throttle = require('throttle');
+var zlib = require('zlib');
 
 var argv = require('optimist')
 	.options({
+		'config': {
+			'description': 'Location of optional configuration file'
+		},
 		'root': {
 			'description': 'Root assets path',
 			'demand': true
@@ -103,21 +107,43 @@ function generateManifest(callback) {
 	getMods(function (err, mods) {
 		if (err) return callback(err);
 
-		async.concat(mods, getModFiles, function (err, files) {
+		async.concatSeries(mods, getModFiles, function (err, files) {
 			if (err) return callback(err);
 
-			async.map(files, function (file, cb) {
-				fs.stat(file, function (err, stat) {
-					if (err) return cb(err);
+			async.mapSeries(files, function (file, cb) {
+				console.log('processing ' + file);
 
-					checksum(file, function (err, checksum) {
-						if (err) return cb(err);
+				var length = 0;
+				var sum = crypto.createHash('md5');
 
-						cb(null, {
-							name: path.relative(argv.root, file),
-							size: stat.size,
-							checksum: checksum
-						});
+				// stream each file in, generating a hash for it's original
+				// contents, and gzip'ing the buffer to determine the compressed
+				// length for the client so it can present accurate progress info
+				var stream = fs.createReadStream(file);
+
+				// gzip the file contents to determine the compressed length
+				// of the file so the client can present correct progress info
+				var gzip = zlib.createGzip();
+
+				stream.on('error', function (err) {
+					callback(err);
+				});
+				stream.on('data', function (data) {
+					gzip.write(data);
+					sum.update(data);
+				});
+				stream.on('end', function () {
+					gzip.end();
+				});
+
+				gzip.on('data', function (data) {
+					length += data.length;
+				});
+				gzip.on('end', function () {
+					cb(null, {
+						name: path.relative(argv.root, file),
+						size: length,
+						checksum: sum.digest('hex')
 					});
 				});
 			}, function (err, entries) {
@@ -158,7 +184,26 @@ function handlePak(req, res, next) {
 	// sendfile2(absolutePath, res);
 }
 
+function loadConfig() {
+	if (!argv.config) {
+		return;
+	}
+
+	try {
+		console.log('Loading config file from ' + argv.config + '..');
+		var data = require(argv.config);
+		_.extend(config, data);
+	} catch (e) {
+		console.log('Failed to load config', e);
+	}
+
+	return config;
+}
+
 (function main() {
+	var config = loadConfig();
+	if (config) _.extend(argv, config);
+
 	// Setup the express app.
 	var app = express();
 	app.use(function (req, res, next) {

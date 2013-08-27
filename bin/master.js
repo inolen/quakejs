@@ -8,7 +8,15 @@ var WebSocketServer = require('ws').Server;
 var cursor = ansi(process.stdout);
 
 var argv = require('optimist')
-	.describe('config', 'Location of the configuration file').default('config', './master.json')
+	.options({
+		'config': {
+			'description': 'Location of optional configuration file'
+		},
+		'port': {
+			'description': 'Server port',
+			'default': 9000
+		}
+	})
 	.argv;
 
 if (argv.h || argv.help) {
@@ -255,23 +263,6 @@ function removeClient(conn) {
  * main
  *
  **********************************************************/
-function loadConfig() {
-	var config = {
-		port: 45735
-	};
-
-	try {
-		cursor.write('loading config file from ' + argv.config + '.. ');
-		var data = require(argv.config);
-		_.extend(config, data);
-		cursor.write('ok\n');
-	} catch (e) {
-		cursor.write('error\n');
-	}
-
-	return config;
-}
-
 function getRemoteAddress(ws) {
 	// By default, check the underlying socket's remote address.
 	var address = ws._socket.remoteAddress;
@@ -301,8 +292,25 @@ function connection(ws) {
 	this.port = getRemotePort(ws);
 }
 
+function loadConfig() {
+	if (!argv.config) {
+		return;
+	}
+
+	try {
+		console.log('Loading config file from ' + argv.config + '..');
+		var data = require(argv.config);
+		_.extend(config, data);
+	} catch (e) {
+		console.log('Failed to load config', e);
+	}
+
+	return config;
+}
+
 (function main() {
 	var config = loadConfig();
+	if (config) _.extend(argv, config);
 
 	var server = http.createServer();
 
@@ -354,7 +362,7 @@ function connection(ws) {
 		});
 	});
 
-	server.listen(config.port, function() {
+	server.listen(argv.port, function() {
 		console.log('master server is listening on port ' + server.address().port);
 	});
 
