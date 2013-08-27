@@ -87,19 +87,15 @@
 				ioq3.setCanvasSize(ioq3.viewport.offsetWidth, ioq3.viewport.offsetHeight);
 			}
 
-			ioq3.noExitRuntime = true;
 			ioq3.viewport = document.getElementById('viewport-frame');
 			ioq3.elementPointerLock = true;
 
 			// Debounce until no events have been received for a while.
 			var resizeTimeout = 0;
-			window.addEventListener('resize', function () {
-				clearTimeout(resizeTimeout);
-				resizeTimeout = setTimeout(resizeViewport, 500);
-			});
+			window.addEventListener('resize', resizeViewport);
 
 			// merge default args with query string args
-			var args = ['+set', 'fs_cdn', '<%= content %>'];
+			var args = ['+set', 'fs_cdn', '<%= content %>', '+set', 'sv_pure', '0'];
 			args.push.apply(args, getQueryCommands());
 			ioq3.callMain(args);
 		};
