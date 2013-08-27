@@ -81,7 +81,14 @@
 
 		window.onload = function () {
 			function resizeViewport() {
-				if (!ioq3.canvas) {  // ignore if the canvas hasn't yet initialized
+				if (!ioq3.canvas) {
+					// ignore if the canvas hasn't yet initialized
+					return;
+				}
+				if ((document['webkitFullScreenElement'] || document['webkitFullscreenElement'] ||
+             document['mozFullScreenElement'] || document['mozFullscreenElement'] ||
+             document['fullScreenElement'] || document['fullscreenElement'])) {
+					// ignore resize events due to going fullscreen
 					return;
 				}
 				ioq3.setCanvasSize(ioq3.viewport.offsetWidth, ioq3.viewport.offsetHeight);
@@ -89,9 +96,6 @@
 
 			ioq3.viewport = document.getElementById('viewport-frame');
 			ioq3.elementPointerLock = true;
-
-			// Debounce until no events have been received for a while.
-			var resizeTimeout = 0;
 			window.addEventListener('resize', resizeViewport);
 
 			// merge default args with query string args
