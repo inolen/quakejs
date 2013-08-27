@@ -16,7 +16,7 @@ var argv = require('optimist')
 		},
 		'root': {
 			'description': 'Root assets path',
-			'demand': true
+			'default': path.join(__dirname, '..', 'assets')
 		},
 		'port': {
 			'description': 'Server port',
@@ -102,7 +102,7 @@ function getModFiles(mod, callback) {
 }
 
 function generateManifest(callback) {
-	console.log('generating manifest..');
+	console.log('generating manifest from ' + argv.root);
 
 	getMods(function (err, mods) {
 		if (err) return callback(err);
@@ -186,8 +186,10 @@ function handlePak(req, res, next) {
 
 function loadConfig() {
 	if (!argv.config) {
-		return;
+		return null;
 	}
+
+	var config = {};
 
 	try {
 		console.log('Loading config file from ' + argv.config + '..');

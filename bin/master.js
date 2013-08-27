@@ -294,8 +294,10 @@ function connection(ws) {
 
 function loadConfig() {
 	if (!argv.config) {
-		return;
+		return null;
 	}
+
+	var config = {};
 
 	try {
 		console.log('Loading config file from ' + argv.config + '..');
