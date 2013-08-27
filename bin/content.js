@@ -133,10 +133,12 @@ function handleManifest(req, res, next) {
 	res.json(currentManifest);
 }
 
-function handleStaticAsset(req, res, next) {
-	var relativePath = req.params[0];
+function handlePak(req, res, next) {
+	var pakName = req.params[0];
+	var checksum = req.params[1];
+	var ext = req.params[2];
+	var relativePath = pakName + ext;
 	var absolutePath = path.join(argv.root, relativePath);
-	var checksum = req.query.checksum;
 
 	// Make sure they're requesting a valid asset, else return a 400.
 	var valid = currentManifest.some(function (entry) {
@@ -171,7 +173,7 @@ function handleStaticAsset(req, res, next) {
 		}
 	}));
 	app.get('/assets/manifest.json', handleManifest);
-	app.get(/^\/assets\/(.+\.pk3)$/, handleStaticAsset);
+	app.get(/^\/assets\/(.+)\.(.+)(\.pk3)$/, handlePak);
 
 	// Startup the HTTP server.
 	var server = http.createServer(app);
