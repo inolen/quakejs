@@ -14,7 +14,7 @@ var argv = require('optimist')
 		},
 		'port': {
 			'description': 'Server port',
-			'default': 45735
+			'default': 27950
 		}
 	})
 	.argv;
@@ -332,13 +332,15 @@ function loadConfig() {
 			buffer = (new Uint8Array(buffer)).buffer;  // node Buffer to ArrayBuffer
 
 			// check to see if this is emscripten's port identifier message
-			if (first &&
+			var wasfirst = first;
+			first = false;
+			if (wasfirst &&
 				buffer.byteLength === 10 &&
 				buffer[0] === 255 && buffer[1] === 255 && buffer[2] === 255 && buffer[3] === 255 &&
 				buffer[4] === 'p'.charCodeAt(0) && buffer[5] === 'o'.charCodeAt(0) && buffer[6] === 'r'.charCodeAt(0) && buffer[7] === 't'.charCodeAt(0)) {
 				conn.port = ((buffer[8] << 8) | buffer[9]);
+				return;
 			}
-			first = false;
 
 			var msg = stripOOB(buffer);
 			if (!msg) {
