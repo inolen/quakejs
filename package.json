@@ -14,7 +14,7 @@
   "license": "MIT",
   "readmeFilename": "README.md",
   "dependencies": {
-    "archiver": "~0.4.6",
+    "archiver": "~0.4.8",
     "async": "~0.2.9",
     "execSync": "~1.0.1-pre",
     "quakejs-files": "0.0.1",

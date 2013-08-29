@@ -10,136 +10,8 @@ var unzip = require('unzip');
 
 var src = process.argv[2];
 var dest = process.argv[3];
+var tempdir = temp.mkdirSync('repak');
 
-//
-//
-//
-function get_paks(root, callback) {
-	console.log('get_paks', root);
-
-	fs.readdir(root, function (err, files) {
-		if (err) return callback(err);
-
-		var paks = files.filter(function (file) {
-			return path.extname(file).toLowerCase() === '.pk3';
-		});
-
-		// convert to absolute paths
-		paks = paks.map(function (file) { return path.join(root, file); });
-
-		// sort the paks in ascending order
-		paks = paks.sort();
-
-		callback(null, paks);
-	});
-}
-
-function get_pak_entries(pak, callback) {
-	console.log('ls', pak);
-
-	var files = [];
-	fs.createReadStream(pak)
-		.pipe(unzip.Parse())
-		.on('entry', function (entry) {
-			var type = entry.type;
-			if (type === 'File') {
-				files.push(entry.path);
-			}
-			entry.autodrain();
-		})
-		.on('close', function () {
-			callback(null, files);
-		})
-		.on('error', function (err) {
-			callback(err);
-		})
-}
-
-function merge_pak_entries(paks, callback) {
-	var filemap = {};
-
-	// paks are sorted in ascending alphabetical order, the
-	// intent here is to allow the contents of paks with a 
-	// higher sort value to overwrite the contents of a pak
-	// with a lower sort value.
-	async.eachSeries(paks, function (pak, cb) {
-		get_pak_entries(pak, function (err, files) {
-			if (err) return cb(err);
-
-			for (var i = 0; i < files.length; i++) {
-				filemap[files[i]] = pak;
-			}
-
-			cb(null);
-		});
-	}, function (err) {
-		callback(err, filemap);
-	});
-}
-
-function get_pak_files(pak, files, callback) {
-	var buffers = {};
-	fs.createReadStream(pak)
-		.pipe(unzip.Parse())
-		.on('entry', function (entry) {
-			if (files.indexOf(entry.path) !== -1) {
-				var bufs = [];
-				entry.on('data', function (d) { bufs.push(d); });
-				entry.on('end', function () { buffers[entry.path] = Buffer.concat(bufs); });
-			} else {
-				entry.autodrain();
-			}
-		})
-		.on('close', function () {
-			for (var i = 0; i < files.length; i++) {
-				var file = files[i];
-				if (!buffers[file]) {
-					return callback(new Error('Couldn\'t find file "' + file + '"'));
-				}
-			}
-			callback(null, buffers);
-		})
-		.on('error', function (err) {
-			callback(err);
-		});
-}
-
-function write_pak(filename, assets, callback) {
-	var output = fs.createWriteStream(filename);
-	var archive = archiver.create('zip', { /*highWaterMark: 1024 * 1024, */ zlib: { level: 0 } });
-
-	console.log('writing pak ' + filename);
-
-	archive.on('error', function (err) {
-		callback(err);
-	});
-
-	archive.pipe(output);
-
-	async.eachSeries(assets, function (asset, cb) {
-		console.log('.. adding ' + asset.name);
-
-		archive.append(asset.buffer, {
-			date: new Date(1970, 0, 1),  // use the epoch reference time to keep the checksums consistent
-			name: asset.name
-		}, cb);
-	}, function (err) {
-		if (err) return callback(err);
-
-		archive.finalize(function (err, written) {
-			if (err) return callback(err);
-
-			output.on('finish', function () {
-				console.log('done writing ' + filename);
-				callback(null);
-			});
-		});
-	});
-}
-
-//
-//
-//
 var blacklist = [
 	/\.dm[_]*\d+/,
 	/_[123]{1}\.md3/,
@@ -150,14 +22,39 @@ var blacklist = [
 	'maps/pro-q3tourney2.bsp',
 	'maps/pro-q3tourney4.aas',
 	'maps/pro-q3tourney4.bsp',
+	'maps/q3ctf1.aas',
+	'maps/q3ctf2.aas',
+	'maps/q3ctf3.aas',
+	'maps/q3ctf4.aas',
+	'maps/q3ctf5.aas',
+	'maps/q3dm0.aas',
 	'maps/q3dm1.aas',
 	'maps/q3dm1.bsp',
+	'maps/q3dm2.aas',
+	'maps/q3dm3.aas',
+	'maps/q3dm4.aas',
+	'maps/q3dm5.aas',
+	'maps/q3dm6.aas',
+	'maps/q3dm8.aas',
 	'maps/q3dm9.aas',
 	'maps/q3dm9.bsp',
+	'maps/q3dm10.aas',
+	'maps/q3dm11.aas',
+	'maps/q3dm12.aas',
+	'maps/q3dm13.aas',
+	'maps/q3dm14.aas',
+	'maps/q3dm15.aas',
+	'maps/q3dm16.aas',
 	'maps/q3dm17.aas',
 	'maps/q3dm17.bsp',
+	'maps/q3dm18.aas',
+	'maps/q3tourney1.aas',
 	'maps/q3tourney2.aas',
 	'maps/q3tourney2.bsp',
+	'maps/q3tourney3.aas',
+	'maps/q3tourney4.aas',
+	'maps/q3tourney5.aas',
+	'maps/q3tourney6.aas',
 	'maps/q3tourney6_ctf.aas',
 	'maps/q3tourney6_ctf.bsp',
 	'models/players/brandon',
@@ -177,6 +74,50 @@ var common = [
 	'scripts/sfx.shader'
 ];
 
+function walk(dir) {
+	var results = [];
+	var list = fs.readdirSync(dir);
+	list.forEach(function (file) {
+		file = dir + '/' + file;
+		var stat = fs.statSync(file);
+		if (stat && stat.isDirectory()) {
+			results = results.concat(walk(file));
+		} else {
+			results.push(file);
+		}
+	});
+	return results;
+}
+
+function get_paks(root, callback) {
+	console.log('get_paks', root);
+
+	fs.readdir(root, function (err, files) {
+		if (err) return callback(err);
+
+		var paks = files.filter(function (file) {
+			return path.extname(file).toLowerCase() === '.pk3';
+		});
+
+		// convert to absolute paths
+		paks = paks.map(function (file) { return path.join(root, file); });
+
+		callback(null, paks);
+	});
+}
+
+function extract_pak(pak, root, callback) {
+	console.log('extracting ' + pak);
+	fs.createReadStream(pak)
+		.pipe(unzip.Extract({ path: root }))
+		.on('finish', function () {
+			callback(null);
+		})
+		.on('error', function (err) {
+			callback(err);
+		});
+}
+
 function filter_file(file) {
 	file = file.toLowerCase();
 	for (var i = 0; i < blacklist.length; i++) {
@@ -190,13 +131,30 @@ function filter_file(file) {
 	return true;
 }
 
+function graph_files(root, files) {
+	var graph = new AssetGraph();
+
+	// filter out files we don't care about
+	files = files.filter(filter_file);
+
+	for (var i = 0; i < files.length; i++) {
+		var file = files[i];
+		var absolute = path.join(root, file);
+		var ext = path.extname(file);
+		var load = ext === '.bsp' || ext === '.md3' || ext === '.shader' || ext === '.skin';
+		graph.add(file, load ? fs.readFileSync(absolute) : null);
+	}
+
+	return graph;
+}
+
 function find_map_verts(root, verts, references) {
 	verts = verts || [];
 	references = references || []
 
-	if (common.indexOf(root.data.name) !== -1 ||
-		  root.data.name.indexOf('textures/effects') !== -1 ||
-		  root.data.name.indexOf('textures/sfx') !== -1) {
+	if (common.indexOf(root.data.key) !== -1 ||
+		  root.data.key.indexOf('textures/effects') !== -1 ||
+		  root.data.key.indexOf('textures/sfx') !== -1) {
 		return verts;
 	}
 
@@ -206,8 +164,8 @@ function find_map_verts(root, verts, references) {
 			if (src === v) {
 				continue;
 			}
-			if (src.data.type === 1 /*ASSET.MAP*/ && references.indexOf(src.data.name) === -1) {
-				references.push(src.data.name);
+			if (src.data.type === 1 /*ASSET.MAP*/ && references.indexOf(src.data.key) === -1) {
+				references.push(src.data.key);
 			}
 			fn(src);
 		}
@@ -232,7 +190,7 @@ function find_map_verts(root, verts, references) {
 	return verts;
 }
 
-function group_graph_verts(graph) {
+function group_verts(graph) {
 	var paks = {};
 	var maps = graph.maps();
 	var referenced = [];
@@ -244,7 +202,7 @@ function group_graph_verts(graph) {
 		}
 		var map = maps[key];
 		var filename = path.basename(key).replace('.bsp', '.pk3');
-		var verts = find_map_verts(map).filter(function (v) { return v.data.buffer; });
+		var verts = find_map_verts(map);
 
 		for (var i = 0; i < verts.length; i++) {
 			referenced[verts[i].id] = true;
@@ -254,7 +212,7 @@ function group_graph_verts(graph) {
 	}
 
 	// find any assets _not_ consumed by a map pack
-	var common = graph.filter(function (v) {
+	paks['pak0.pk3'] = graph.filter(function (v) {
 		if (referenced[v.id]) {
 			return false;
 		}
@@ -279,74 +237,81 @@ function group_graph_verts(graph) {
 			fn(v);
 
 			if (!hasValidRef &&
-				  v.data.name.indexOf('textures/') !== -1 &&
-				  v.data.name.indexOf('textures/effects') === -1 &&
-				  v.data.name.indexOf('textures/sfx') === -1) {
+				  v.data.key.indexOf('textures/') !== -1 &&
+				  v.data.key.indexOf('textures/effects') === -1 &&
+				  v.data.key.indexOf('textures/sfx') === -1) {
 				return false;
 			}
 		}
 
 		return true;
 	})
-	.filter(function (v) { return v.data.buffer; })
 	.sort(function (a,b) {
-		return a.data.name.localeCompare(b.data.name);
+		return a.data.key.localeCompare(b.data.key);
 	});
-
-	// split up common paks every ~50mb
-	var num = 0;
-	var total = 0;
-	var assets = [];
-	var maxBytes = 50 * 1024 * 1024;
-	for (var i = 0; i < common.length; i++) {
-		var asset = common[i];
-
-		total += asset.data.buffer.length;
-
-		assets.push(asset);
-
-		if (total >= maxBytes || i === common.length-1) {
-			paks['pak' + num + '.pk3'] = assets;
-			num++;
-			total = 0;
-			assets = [];
-		}
-	}
 
 	return paks;
 }
 
-function transform_asset(asset) {
-	if (!asset.buffer || asset.name.indexOf('.wav') === -1) {
+function transform_asset(assetsRoot, asset) {
+	if (asset.path.indexOf('.wav') === -1) {
 		return asset;
 	}
 
-	var tempsrc = temp.openSync('repak');
-	var tempdest = temp.openSync('repak');
-
-	// write out the input
-	fs.writeSync(tempsrc.fd, asset.buffer, 0, asset.buffer.length, 0);
-	fs.closeSync(tempsrc.fd);
+	var absoluteSrc = path.join(assetsRoot, asset.path);
+	var absoluteDest = absoluteSrc.replace('.wav', '.opus');
 
 	// do the transform
-	var result = sh.exec('opusenc ' + tempsrc.path + ' ' + tempdest.path);
+	var result = sh.exec('opusenc ' + absoluteSrc + ' ' + absoluteDest);
 	if (result.code) {
-		console.log('.. failed to opus encode ' + asset.name);
-		asset.buffer = null;
+		console.log('.. failed to opus encode ' + asset.path);
 		return asset;
 	}
 
-	// read in the output
-	var stat = fs.fstatSync(tempdest.fd);
-	var buffer = new Buffer(stat.size);
-	fs.readSync(tempdest.fd, buffer, 0, stat.size, 0);
-	fs.closeSync(tempdest.fd);
-
 	// update the asset
-	asset.name = asset.name.replace('.wav', '.opus');
-	asset.buffer = buffer;
+	asset.path = asset.path.replace('.wav', '.opus');
 
 	return asset;
+}
+
+function write_pak(filename, assetsRoot, assets, callback) {
+	var output = fs.createWriteStream(filename);
+	var archive = archiver.create('zip', {
+		// highWaterMark: 1024 * 1024,
+		zlib: { level: 0 }
+	});
+
+	console.log('writing pak ' + filename);
+
+	archive.on('error', function (err) {
+		callback(err);
+	});
+
+	archive.pipe(output);
+
+	async.eachSeries(assets, function (asset, cb) {
+		var absolute = path.join(assetsRoot, asset.path);
+
+		console.log('.. adding ' + asset.path);
+
+		// using fs.readFileSync due to
+		// https://github.com/ctalkington/node-archiver/issues/32
+		archive.append(fs.readFileSync(absolute), {
+			date: new Date(1970, 0, 1),  // use the epoch reference time to keep the checksums consistent
+			name: asset.path
+		}, cb);
+	}, function (err) {
+		if (err) return callback(err);
+
+		archive.finalize(function (err, written) {
+			if (err) return callback(err);
+
+			output.on('finish', function () {
+				console.log('done writing ' + filename);
+				callback(null);
+			});
+		});
+	});
 }
 
 async.waterfall([
@@ -354,64 +319,84 @@ async.waterfall([
 		get_paks(src, cb);
 	},
 	function (paks, cb) {
-		merge_pak_entries(paks, cb);
-	},
-	function (filemap, cb) {
-		// reverse the filemap such that each file is grouped by pak
-		var pakmap = {};
-		for (var file in filemap) {
-			if (!filemap.hasOwnProperty(file)) {
-				continue;
-			}
-			// filter out files we don't care about
-			if (!filter_file(file)) {
-				continue;
-			}
-			var pak = filemap[file];
-			if (!pakmap[pak]) {
-				pakmap[pak] = [];
-			}
-			pakmap[pak].push(file);
-		}
-
-		cb(null, pakmap);
-	},
-	function (pakmap, cb) {
-		var graph = new AssetGraph();
-		// load up each file and add to the asset graph
-		var paks = Object.keys(pakmap);
+		// sort the paks in ascending order and extract
+		paks = paks.sort();
 		async.eachSeries(paks, function (pak, cb) {
-			var files = pakmap[pak];
-			get_pak_files(pak, files, function (err, buffers) {
-				if (err) return callback(err);
-
-				for (var i = 0; i < files.length; i++) {
-					var file = files[i];
-					graph.add(file, buffers[file]);
-				}
-
-				cb(null);
-			});
-		}, function (err) {
-			cb(err, graph);
-		});
+			extract_pak(pak, tempdir, cb);
+		}, cb);
 	},
-	function (graph, cb) {
-		var paks = group_graph_verts(graph);
-		var keys = Object.keys(paks);
+	function (cb) {
+		var files = walk(tempdir).map(function (file) {
+			return path.relative(tempdir, file);
+		});
+		var graph = graph_files(tempdir, files);
+		var paks = group_verts(graph);
 
 		function vert_to_asset(v) {
+			var names = v.data.names;
+			var path;
+
+			// each vert may have multiple names it was referenced as (e.g.
+			// foobar.jpg or foobar.tga). find it's canonical entry based
+			// on the directory walk.
+			for (var i = 0; i < names.length; i++) {
+				var name = names[i];
+				if (files.indexOf(name) === -1) {
+					continue;
+				}
+				path = name;
+				break;
+			}
+
+			v.data.path = path;
+
 			return v.data;
 		}
-		function has_buffer(asset) {
-			return asset.buffer;
+
+		// map vert lists to asset lists
+		for (var pak in paks) {
+			if (!paks.hasOwnProperty(pak)) continue;
+			paks[pak] = paks[pak]
+				.map(vert_to_asset)
+				.filter(function (a) { return !!a.path; })
+				.map(function (asset) { return transform_asset(tempdir, asset); });
 		}
 
+		// split up common pak every ~50mb
+		var common = paks['pak0.pk3'];
+		delete paks['pak0.pk3'];
+
+		var num = 0;
+		var total = 0;
+		var assets = [];
+		var maxBytes = 50 * 1024 * 1024;
+		for (var i = 0; i < common.length; i++) {
+			var asset = common[i];
+
+			try {
+				var absolute = path.join(tempdir, asset.path);
+				var stat = fs.statSync(absolute);
+				total += stat.size;
+			} catch (e) {
+				return cb(err);
+			}
+
+			assets.push(asset);
+
+			if (total >= maxBytes || i === common.length-1) {
+				paks['pak' + num + '.pk3'] = assets;
+				num++;
+				total = 0;
+				assets = [];
+			}
+		}
+
+		// write out each pak
+		var keys = Object.keys(paks);
 		async.eachSeries(keys, function (key, cb) {
 			var filename = path.join(dest, key);
-			var verts = paks[key];
-			var assets = verts.map(vert_to_asset).map(transform_asset).filter(has_buffer);
-			write_pak(filename, assets, cb);
+			var assets = paks[key];
+			write_pak(filename, tempdir, assets, cb);
 		}, cb);
 	}
 ], function (err) {
