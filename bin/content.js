@@ -30,7 +30,7 @@ if (argv.h || argv.help) {
 	return;
 }
 
-var compressedAssets = [ '.pk3' ];
+var compressedAssets = [ '.js', '.pk3' ];
 var currentManifest;
 
 function checksum(filename, callback) {
@@ -84,7 +84,7 @@ function getMods(callback) {
 
 function getModFiles(mod, callback) {
 	var gamePath = path.join(argv.root, mod);
-	var valid = ['.pk3'];
+	var valid = ['.js', '.pk3'];
 	
 	fs.readdir(gamePath, function(err, files) {
 		if (err) return callback(err);
@@ -159,11 +159,11 @@ function handleManifest(req, res, next) {
 	res.json(currentManifest);
 }
 
-function handlePak(req, res, next) {
-	var pakName = req.params[0];
+function handleAsset(req, res, next) {
+	var basename = req.params[0];
 	var checksum = req.params[1];
 	var ext = req.params[2];
-	var relativePath = pakName + ext;
+	var relativePath = basename + ext;
 	var absolutePath = path.join(argv.root, relativePath);
 
 	// Make sure they're requesting a valid asset, else return a 400.
@@ -220,7 +220,7 @@ function loadConfig() {
 		}
 	}));
 	app.get('/assets/manifest.json', handleManifest);
-	app.get(/^\/assets\/(.+)\.(.+)(\.pk3)$/, handlePak);
+	app.get(/^\/assets\/(.+)\.(.+)(\.js|\.pk3)$/, handleAsset);
 
 	// Startup the HTTP server.
 	var server = http.createServer(app);
