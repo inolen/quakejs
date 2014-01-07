@@ -19,13 +19,13 @@
     "execSync": "~1.0.1-pre",
     "quakejs-files": "0.0.1",
     "temp": "~0.5.1",
-    "unzip": "git://github.com/nearinfinity/node-unzip.git#max-call-stack-exceeded-wip",
-    "quakejs-asset-graph": "0.0.1",
     "underscore": "~1.5.1",
     "express": "~3.3.5",
     "optimist": "~0.6.0",
     "ejs": "~0.8.4",
     "ansi": "~0.2.1",
-    "ws": "~0.4.29"
+    "ws": "~0.4.29",
+    "winston": "~0.7.2",
+    "wrench": "~1.5.4"
   }
 }

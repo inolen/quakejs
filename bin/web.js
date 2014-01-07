@@ -1,6 +1,7 @@
 var express = require('express');
 var http = require('http');
 var opt = require('optimist');
+var path = require('path');
 
 var argv = require('optimist')
 	.options({
@@ -23,10 +24,10 @@ if (argv.h || argv.help) {
 function main() {
 	var app = express();
 
-	app.set('views', __dirname);
+	app.set('views', path.join(__dirname, '..', 'template'));
 	app.set('view engine', 'ejs');
 
-	app.use(express.static(__dirname));
+	app.use(express.static(path.join(__dirname, '..', 'public')));
 	app.use(function (req, res, next) {
 		res.locals.content = argv.content;
 		res.render('index');
