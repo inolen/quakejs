@@ -15,8 +15,6 @@ var blacklist = [
 	/\.dm[_]*\d+/,
 	/_[123]{1}\.md3/,
 	'.map',
-	'.roq',
-	'.qvm',
 	'maps/pro-q3tourney2.aas',
 	'maps/pro-q3tourney2.bsp',
 	'maps/pro-q3tourney4.aas',
@@ -67,6 +65,7 @@ var blacklist = [
 var whitelist = [
 	/scripts\/.+\.txt/,
 	'.cfg',
+	'.qvm',
 	'botfiles/',
 	'gfx/',
 	'icons/',
