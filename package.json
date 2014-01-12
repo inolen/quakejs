@@ -17,7 +17,7 @@
     "archiver": "~0.4.8",
     "async": "~0.2.9",
     "execSync": "~1.0.1-pre",
-    "quakejs-files": "0.0.1",
+    "quakejs-files": "0.0.2",
     "temp": "~0.5.1",
     "underscore": "~1.5.1",
     "express": "~3.3.5",
