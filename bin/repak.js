@@ -67,15 +67,19 @@ var whitelist = [
 	'.cfg',
 	'.qvm',
 	'botfiles/',
+	'fonts/',
 	'gfx/',
 	'icons/',
+	'include/',
 	'menu/',
 	'models/',
 	'music/',
 	'sprites/',
 	'sound/',
 	'textures/effects/',
-	'textures/sfx/'
+	'textures/sfx/',
+	'textures/q3f_hud/',
+	'ui/'
 ];
 
 logger.cli();
@@ -113,7 +117,7 @@ function getPaks(root) {
 }
 
 function extractPak(pak, dest) {
-	logger.info('extractPak ' + pak);
+	logger.info('extracting pak ' + pak);
 
 	sh.exec('unzip -o ' + pak + ' -d ' + dest);
 }
@@ -142,8 +146,6 @@ function graphGame(graph, game, root) {
 			v = graph.addAudio(name, game);
 		} else if (ext === '.bsp') {
 			v = graph.addMap(name, game, fs.readFileSync(file));
-		} else if (ext === '.aas') {
-			v = graph.addBot(name, game);
 		} else if (ext === '.md3') {
 			v = graph.addModel(name, game, fs.readFileSync(file));
 		} else if (ext === '.shader') {
@@ -251,12 +253,12 @@ getGames(src).forEach(function (game) {
 var mods = graph.getMods();
 
 mods.forEach(function (mod) {
-	var mapVerts = graph.getMaps(mod);
+	var maps = graph.getMaps(mod);
 
 	// write out paks for each map
-	mapVerts.forEach(function (mapVert) {
-		var pakName = path.join(dest, mapVert.data.game, path.basename(mapVert.id).replace('.map', '.pk3'));
-		var assets = graph.getMapAssets(mapVert, mod, commonReferenceThreshold);
+	maps.forEach(function (map) {
+		var pakName = path.join(dest, mod, map + '.pk3');
+		var assets = graph.getMapAssets(mod, map, commonReferenceThreshold);
 		var fileMap = vertsToFileMap(assets);
 
 		writePak(pakName, fileMap);
@@ -273,11 +275,11 @@ mods.forEach(function (mod) {
 //
 // write out base assets
 //
-var mapVerts = graph.getMaps(baseGame);
+var maps = graph.getMaps(baseGame);
 
-mapVerts.forEach(function (mapVert) {
-	var pakName = path.join(dest, mapVert.data.game, path.basename(mapVert.id).replace('.map', '.pk3'));
-	var assets = graph.getMapAssets(mapVert, baseGame, commonReferenceThreshold);
+maps.forEach(function (map) {
+	var pakName = path.join(dest, baseGame, map + '.pk3');
+	var assets = graph.getMapAssets(baseGame, map, commonReferenceThreshold);
 	var fileMap = vertsToFileMap(assets);
 
 	writePak(pakName, fileMap);
