@@ -6,7 +6,6 @@ var fs = require('fs');
 var http = require('http');
 var opt = require('optimist');
 var path = require('path');
-// var Throttle = require('throttle');
 var zlib = require('zlib');
 
 var argv = require('optimist')
@@ -46,24 +45,6 @@ function checksum(filename, callback) {
 		callback(null, sum.digest('hex'));
 	});
 }
-
-// // debug throttled sendfile
-// function sendfile2(file, res) {
-// 	var stat = fs.statSync(file);
-
-// 	res.statusCode = 200;
-// 	if (!res.getHeader('Content-Type')) {
-// 		if (path.extname(file) === '.js') {
-// 			res.setHeader('Content-Type', 'application/javascript');
-// 		} else {
-// 			res.setHeader('Content-Type', 'application/octet-stream');
-// 		}
-// 	}
-// 	res.setHeader('Content-Length', stat.size);
-
-// 	var rs = fs.createReadStream(file);
-// 	rs.pipe(new Throttle(1024 * 1024 * 5)).pipe(res);
-// }
 
 function getMods(callback) {
 	fs.readdir(argv.root, function(err, files) {
@@ -149,6 +130,7 @@ function generateManifest(callback) {
 			}, function (err, entries) {
 				if (err) return callback(err);
 				console.log('done generating manifest, ' + entries.length + ' entries');
+
 				callback(err, entries);
 			});
 		});
@@ -156,6 +138,8 @@ function generateManifest(callback) {
 }
 
 function handleManifest(req, res, next) {
+	console.log('serving manifest');
+
 	res.json(currentManifest);
 }
 
@@ -181,7 +165,6 @@ function handleAsset(req, res, next) {
 	res.sendfile(absolutePath, function (err) {
 		if (err) return next(err);
 	});
-	// sendfile2(absolutePath, res);
 }
 
 function loadConfig() {
@@ -192,11 +175,11 @@ function loadConfig() {
 	var config = {};
 
 	try {
-		console.log('Loading config file from ' + argv.config + '..');
+		console.log('loading config file from ' + argv.config + '..');
 		var data = require(argv.config);
 		_.extend(config, data);
 	} catch (e) {
-		console.log('Failed to load config', e);
+		console.log('failed to load config', e);
 	}
 
 	return config;
@@ -206,7 +189,6 @@ function loadConfig() {
 	var config = loadConfig();
 	if (config) _.extend(argv, config);
 
-	// Setup the express app.
 	var app = express();
 	app.use(function (req, res, next) {
 		res.setHeader('Access-Control-Allow-Origin', '*');
@@ -222,13 +204,12 @@ function loadConfig() {
 	app.get('/assets/manifest.json', handleManifest);
 	app.get(/^\/assets\/(.+)\.(.+)(\.js|\.pk3)$/, handleAsset);
 
-	// Startup the HTTP server.
 	var server = http.createServer(app);
 	server.listen(argv.port, function () {
 		console.log('content server is now listening on port', server.address().address, server.address().port);
 	});
 
-	// Generate an initial manifest.
+	// generate an initial manifest
 	generateManifest(function (err, manifest) {
 		if (err) throw err;
 		currentManifest = manifest;

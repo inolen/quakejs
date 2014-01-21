@@ -190,7 +190,7 @@ function transformFile(src) {
 	var result = sh.exec('opusenc ' + src + ' ' + dest);
 	if (result.code) {
 		console.log('.. failed to opus encode ' + src);
-		return asset;
+		return src;
 	}
 
 	return dest;
