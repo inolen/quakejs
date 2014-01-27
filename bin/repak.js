@@ -1,71 +1,24 @@
 var AssetGraph = require('../lib/asset-graph');
+var async = require('async');
 var fs = require('fs');
 var logger = require('winston');
 var path = require('path');
-var sh = require('execSync');
+var exec = require('child_process').exec;
+var execSync = require('execSync').exec;
 var temp = require('temp');
 var wrench = require('wrench');
 
-var src = process.argv[2];
-var dest = process.argv[3];
-
 var baseGame = 'basejs';
 var commonReferenceThreshold = 3;
+var commonPakMaxSize = 32 * 1024 * 1024;
 var blacklist = [
-	/\.dm[_]*\d+/,
 	/_[123]{1}\.md3/,
-	'.map',
-	'maps/pro-q3tourney2.aas',
-	'maps/pro-q3tourney2.bsp',
-	'maps/pro-q3tourney4.aas',
-	'maps/pro-q3tourney4.bsp',
-	'maps/q3ctf1.aas',
-	'maps/q3ctf2.aas',
-	'maps/q3ctf3.aas',
-	'maps/q3ctf4.aas',
-	'maps/q3ctf5.aas',
-	'maps/q3dm0.aas',
-	'maps/q3dm1.aas',
-	'maps/q3dm1.bsp',
-	'maps/q3dm2.aas',
-	'maps/q3dm3.aas',
-	'maps/q3dm4.aas',
-	'maps/q3dm5.aas',
-	'maps/q3dm6.aas',
-	'maps/q3dm8.aas',
-	'maps/q3dm9.aas',
-	'maps/q3dm9.bsp',
-	'maps/q3dm10.aas',
-	'maps/q3dm11.aas',
-	'maps/q3dm12.aas',
-	'maps/q3dm13.aas',
-	'maps/q3dm14.aas',
-	'maps/q3dm15.aas',
-	'maps/q3dm16.aas',
-	'maps/q3dm17.aas',
-	'maps/q3dm17.bsp',
-	'maps/q3dm18.aas',
-	'maps/q3tourney1.aas',
-	'maps/q3tourney2.aas',
-	'maps/q3tourney2.bsp',
-	'maps/q3tourney3.aas',
-	'maps/q3tourney4.aas',
-	'maps/q3tourney5.aas',
-	'maps/q3tourney6.aas',
-	'maps/q3tourney6_ctf.aas',
-	'maps/q3tourney6_ctf.bsp',
-	'models/players/brandon',
-	'models/players/carmack',
-	'models/players/cash',
-	'models/players/light',
-	'models/players/medium',
-	'models/players/paulj',
-	'models/players/tim'
+	/\.map$/
 ];
 var whitelist = [
+	/\.cfg$/,
+	/\.qvm$/,
 	/scripts\/.+\.txt/,
-	'.cfg',
-	'.qvm',
 	'botfiles/',
 	'fonts/',
 	'gfx/',
@@ -74,28 +27,83 @@ var whitelist = [
 	'menu/',
 	'models/',
 	'music/',
+	'powerups/',  // powerup shaders
 	'sprites/',
 	'sound/',
-	'textures/effects/',
-	'textures/sfx/',
-	'textures/q3f_hud/',
 	'ui/'
 ];
 
 logger.cli();
 logger.level = 'debug';
 
-function isBlacklisted(file) {
+var src = process.argv[2];
+var dest = process.argv[3];
+var config = loadConfig();
+
+function loadConfig() {
+	var config;
+
+	try {
+		config = require(__dirname + '/repak-config.json');
+
+		// convert strings that look like regular expressions to RegExp instances
+		var mapRegex = function (v, i) {
+			var m = v.match(/^\/(.+)\/$/);
+			if (m) {
+				return new RegExp(m[1]);
+			}
+			return v;
+		};
+
+		Object.keys(config.games).forEach(function (game) {
+			var gameConfig = config.games[game];
+
+			gameConfig.exclude = (gameConfig.exclude ? gameConfig.exclude.map(mapRegex) : []);
+			gameConfig.include = (gameConfig.include ? gameConfig.include.map(mapRegex) : []);
+		});
+	} catch (e) {
+		config = { games: {} };
+	}
+
+	return config;
+}
+
+function isListed(list, file) {
 	file = file.toLowerCase();
-	for (var i = 0; i < blacklist.length; i++) {
-		var entry = blacklist[i];
+
+	for (var i = 0; i < list.length; i++) {
+		var entry = list[i];
+
 		if (typeof entry === 'object' && entry.test(file)) {
 			return true;
 		} else if (typeof entry === 'string' && file.indexOf(entry) !== -1) {
 			return true;
 		}
 	}
+
 	return false;
+}
+
+function isBlacklisted(game, file) {
+	var list = config.games[game] ? config.games[game].exclude : [];
+	list = list.concat(blacklist);
+	return isListed(list, file);
+}
+
+function isWhitelisted(game, file) {
+	var list = config.games[game] ? config.games[game].include : [];
+	list = list.concat(whitelist);
+	return isListed(list, file);
+}
+
+function getGameConfig(game) {
+	var gameConfig = config.games[game];
+	return gameConfig;
+}
+
+function getMapConfig(game, map) {
+	var gameConfig = config.games[game];
+	return gameConfig && gameConfig.maps && gameConfig.maps[mapName];
 }
 
 function getGames(root) {
@@ -119,7 +127,7 @@ function getPaks(root) {
 function extractPak(pak, dest) {
 	logger.info('extracting pak ' + pak);
 
-	sh.exec('unzip -o ' + pak + ' -d ' + dest);
+	execSync('unzip -o ' + pak + ' -d ' + dest);
 }
 
 function flattenPaks(paks) {
@@ -145,11 +153,14 @@ function graphGame(graph, game, root) {
 		if (ext === '.wav') {
 			v = graph.addAudio(name, game);
 		} else if (ext === '.bsp') {
-			v = graph.addMap(name, game, fs.readFileSync(file));
+			var mapName = name.replace(path.extname(name), '');
+			var gameConfig = config.games[game];
+			var mapConfig = gameConfig && gameConfig.maps && gameConfig.maps[mapName];
+			v = graph.addMap(name, game, fs.readFileSync(file), mapConfig && mapConfig.whitelist);
 		} else if (ext === '.md3') {
 			v = graph.addModel(name, game, fs.readFileSync(file));
 		} else if (ext === '.shader') {
-			v = graph.addShader(name, game, fs.readFileSync(file));
+			v = graph.addScript(name, game, fs.readFileSync(file));
 		} else if (ext === '.skin') {
 			v = graph.addSkin(name, game, fs.readFileSync(file));
 		} else if (ext === '.jpg' || ext === '.tga') {
@@ -166,6 +177,11 @@ function graphGame(graph, game, root) {
 
 	var files = wrench.readdirSyncRecursive(root).filter(function (file) {
 		var absolute = path.join(root, file);
+
+		if (isBlacklisted(game, file)) {
+			return false;
+		}
+
 		try {
 			var stats = fs.lstatSync(absolute);
 			return stats.isFile();
@@ -187,7 +203,7 @@ function transformFile(src) {
 	var dest = src.replace('.wav', '.opus');
 
 	// do the transform
-	var result = sh.exec('opusenc ' + src + ' ' + dest);
+	var result = execSync('opusenc ' + src + ' ' + dest);
 	if (result.code) {
 		console.log('.. failed to opus encode ' + src);
 		return src;
@@ -214,28 +230,60 @@ function vertsToFileMap(verts) {
 	return fileMap;
 }
 
-function writePak(pak, fileMap) {
-	var tempDir = temp.mkdirSync('working');
+function writePak(pak, fileMap, splitThreshold, callback) {
+	if (callback === undefined) {
+		callback = splitThreshold;
+		splitThreshold = undefined;
+	}
 
-	logger.info('writing ' + pak);
+	var currentPak = pak;
+	var part = 0;
 
-	// copy all the files to a temp directory
-	Object.keys(fileMap).forEach(function (relative) {
-		var src = fileMap[relative];
-		var dest = path.join(tempDir, relative);
+	var nextPart = function () {
+		if (splitThreshold) {
+			var ext = path.extname(pak);
+			currentPak = pak.replace(ext, part + ext);
+			part++;
+		}
 
-		var buffer = fs.readFileSync(src);
-		wrench.mkdirSyncRecursive(path.dirname(dest));
-		fs.writeFileSync(dest, buffer);
-	});
+		// remove an existing pak if it exists
+		try {
+			fs.unlinkSync(currentPak);
+		} catch (e) {
+		}
 
-	// zip up the temp directory
-	var absolutePak = path.resolve(process.cwd(), pak);
-	sh.exec('cd ' + tempDir + ' && zip -FSr ' + absolutePak + ' .');
+		// create the directory tree
+		wrench.mkdirSyncRecursive(path.dirname(currentPak));
+
+		logger.info('writing ' + currentPak);
+	};
+
+	var checkNextPart = function () {
+		if (splitThreshold) {
+			var stats = fs.statSync(currentPak);
+
+			if (stats.size >= splitThreshold) {
+				nextPart();
+			}
+		}
+	};
+
+	nextPart();
+
+	async.eachSeries(Object.keys(fileMap), function (relative, cb) {
+		var absolute = fileMap[relative];
+		var baseDir = path.normalize(absolute.replace(relative, ''));
+
+		exec('zip \"' + currentPak + '\" \"' + relative + '\"', { cwd: baseDir }, function (err) {
+			if (err) return cb(err);
+			checkNextPart();
+			cb();
+		});
+	}, callback);
 }
 
 // initialize the graph with each game's files
-var graph = new AssetGraph(baseGame);
+var graph = new AssetGraph(baseGame, commonReferenceThreshold);
 
 getGames(src).forEach(function (game) {
 	var dir = path.join(src, game);
@@ -248,8 +296,11 @@ getGames(src).forEach(function (game) {
 });
 
 //
-// write out each mod's assets
+// write out each game's assets
 //
+var tasks = [];
+
+// do each mod first
 var mods = graph.getMods();
 
 mods.forEach(function (mod) {
@@ -257,36 +308,47 @@ mods.forEach(function (mod) {
 
 	// write out paks for each map
 	maps.forEach(function (map) {
-		var pakName = path.join(dest, mod, map + '.pk3');
-		var assets = graph.getMapAssets(mod, map, commonReferenceThreshold);
+		var assets = graph.getMapAssets(mod, map);
 		var fileMap = vertsToFileMap(assets);
+		var pakName = path.resolve(path.join(dest, mod, map + '.pk3'));
 
-		writePak(pakName, fileMap);
+		tasks.push(function (cb) {
+			writePak(pakName, fileMap, cb);
+		});
 	});
 
 	// write out paks for common assets
-	var pakName = path.join(dest, mod, 'pak0.pk3');
-	var assets = graph.getCommonAssets(mod, whitelist, commonReferenceThreshold);
+	var assets = graph.getCommonAssets(mod, function (file) { return isWhitelisted(mod, file); });
 	var fileMap = vertsToFileMap(assets);
+	var pakName = path.resolve(path.join(dest, mod, 'pak.pk3'));
 
-	writePak(pakName, fileMap);
+	tasks.push(function (cb) {
+		writePak(pakName, fileMap, commonPakMaxSize, cb);
+	});
 });
 
-//
-// write out base assets
-//
+// then the base game
 var maps = graph.getMaps(baseGame);
 
 maps.forEach(function (map) {
-	var pakName = path.join(dest, baseGame, map + '.pk3');
-	var assets = graph.getMapAssets(baseGame, map, commonReferenceThreshold);
+	var assets = graph.getMapAssets(baseGame, map);
 	var fileMap = vertsToFileMap(assets);
+	var pakName = path.resolve(path.join(dest, baseGame, map + '.pk3'));
 
-	writePak(pakName, fileMap);
+	tasks.push(function (cb) {
+		writePak(pakName, fileMap, cb);
+	});
 });
 
-var pakName = path.join(dest, baseGame, 'pak0.pk3');
-var assets = graph.getCommonAssets(baseGame, whitelist, commonReferenceThreshold);
+var assets = graph.getCommonAssets(baseGame, function (file) { return isWhitelisted(baseGame, file); });
 var fileMap = vertsToFileMap(assets);
+var pakName = path.resolve(path.join(dest, baseGame, 'pak.pk3'));
 
-writePak(pakName, fileMap);
+tasks.push(function (cb) {
+	writePak(pakName, fileMap, commonPakMaxSize, cb);
+});
+
+// write out everything
+async.parallelLimit(tasks, 8, function (err) {
+	if (err) throw err;
+});
