@@ -77,8 +77,23 @@ function parseInfoString(str) {
  **********************************************************/
 var CHALLENGE_MIN_LENGTH = 9;
 var CHALLENGE_MAX_LENGTH = 12;
-var GAMENAME_LENGTH = 64;
-var GAMETYPE_LENGTH = 32;
+
+function buildChallenge() {
+	var challenge = '';
+	var length = CHALLENGE_MIN_LENGTH - 1 +
+		parseInt(Math.random() * (CHALLENGE_MAX_LENGTH - CHALLENGE_MIN_LENGTH + 1), 10);
+
+	for (var i = 0; i < length; i++) {
+		var c;
+		do {
+			c = Math.floor(Math.random() * (126 - 33 + 1) + 33); // -> 33 ... 126 (inclusive)
+		} while (c === '\\'.charCodeAt(0) || c === ';'.charCodeAt(0) || c === '"'.charCodeAt(0) || c === '%'.charCodeAt(0) || c === '/'.charCodeAt(0));
+
+		challenge += String.fromCharCode(c);
+	}
+
+	return challenge;
+}
 
 function handleHeartbeat(conn, data) {
 	cursor
@@ -102,23 +117,6 @@ function handleInfoResponse(conn, data) {
 	// TODO validate data
 
 	updateServer(conn.addr, conn.port);
-}
-
-function buildChallenge() {
-	var challenge = '';
-	var length = CHALLENGE_MIN_LENGTH - 1 +
-		parseInt(Math.random() * (CHALLENGE_MAX_LENGTH - CHALLENGE_MIN_LENGTH + 1), 10);
-
-	for (var i = 0; i < length; i++) {
-		var c;
-		do {
-			c = 33 + parseInt(Math.random() * (126 - 33 + 1), 10);  // -> c = 33..126
-		} while (c == '\\' || c == ';' || c == '"' || c == '%' || c == '/');
-
-		challenge += String.fromCharCode(c);
-	}
-
-	return challenge;
 }
 
 function sendGetInfo(conn) {
