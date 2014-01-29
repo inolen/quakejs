@@ -143,6 +143,15 @@ function handleManifest(req, res, next) {
 	res.json(currentManifest);
 }
 
+function handleStatic(req, res, next) {
+	var basename = req.params[0];
+	var absolutePath = path.join(argv.root, basename);
+
+	console.log('serving ' + basename);
+
+	res.sendfile(absolutePath);
+}
+
 function handleAsset(req, res, next) {
 	var basename = req.params[0];
 	var checksum = req.params[1];
@@ -162,9 +171,7 @@ function handleAsset(req, res, next) {
 
 	console.log('serving ' + relativePath + ' ' + checksum);
 
-	res.sendfile(absolutePath, function (err) {
-		if (err) return next(err);
-	});
+	res.sendfile(absolutePath);
 }
 
 function loadConfig() {
@@ -202,6 +209,7 @@ function loadConfig() {
 		}
 	}));
 	app.get('/assets/manifest.json', handleManifest);
+	app.get(/^\/assets\/(linuxq3ademo-1.11-6.x86.gz.sh|linuxq3apoint-1.32b-3.x86.run)$/, handleStatic);
 	app.get(/^\/assets\/(.+)\.(.+)(\.js|\.pk3)$/, handleAsset);
 
 	var server = http.createServer(app);
