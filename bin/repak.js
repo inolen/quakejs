@@ -9,9 +9,9 @@ var os = require('os');
 var temp = require('temp');
 var wrench = require('wrench');
 
-var baseGame = 'basejs';
+var baseGame = 'baseq3';
 var commonReferenceThreshold = 3;
-var commonPakMaxSize = 32 * 1024 * 1024;
+var commonPakMaxSize = 16 * 1024 * 1024;
 var blacklist = [
 	/_[123]{1}\.md3/,
 	/\.map$/
@@ -46,13 +46,19 @@ function MatchList(entries) {
 }
 
 MatchList.prototype.matches = function (item) {
+	item = item.toLowerCase();
+
 	for (var i = 0; i < this.entries.length; i++) {
 		var entry = this.entries[i];
 
 		if (typeof entry === 'object' && entry.test(item)) {
 			return true;
-		} else if (typeof entry === 'string' && item.indexOf(entry) !== -1) {
-			return true;
+		} else if (typeof entry === 'string') {
+			entry = entry.toLowerCase();
+
+			if (item.indexOf(entry) !== -1) {
+				return true;
+			}
 		}
 	}
 
@@ -100,12 +106,8 @@ function loadConfig() {
 function getGames(root) {
 	return fs.readdirSync(root).filter(function (file) {
 		var absolute = path.join(root, file);
-		try {
-			var stats = fs.lstatSync(absolute);
-			return stats.isDirectory();
-		} catch (e) {
-			return false;
-		}
+		var stats = fs.lstatSync(absolute);
+		return stats.isDirectory();
 	});
 }
 
@@ -180,12 +182,8 @@ function graphGame(graph, game, root) {
 			return false;
 		}
 
-		try {
-			var stats = fs.lstatSync(absolute);
-			return stats.isFile();
-		} catch (e) {
-			return false;
-		}
+		var stats = fs.lstatSync(absolute);
+		return stats.isFile();
 	});
 
 	files.forEach(function (file) {
@@ -234,53 +232,77 @@ function writePak(pak, fileMap, splitThreshold, callback) {
 		splitThreshold = undefined;
 	}
 
-	var currentPak = pak;
-	var part = 0;
+	var part = 100;
+	var currentPak = nextPartName(pak);
+	var files = Object.keys(fileMap);
 
-	var nextPart = function () {
+	function nextPartName(pak) {
 		if (splitThreshold) {
 			var ext = path.extname(pak);
-			currentPak = pak.replace(ext, part + ext);
+			pak = pak.replace(ext, part + ext);
 			part++;
 		}
+		return pak;
+	}
 
-		// remove an existing pak if it exists
-		try {
-			fs.unlinkSync(currentPak);
-		} catch (e) {
+	function nextFile() {
+		if (!files.length) {
+			return callback();
 		}
 
-		// create the directory tree
-		wrench.mkdirSyncRecursive(path.dirname(currentPak));
-
-		logger.info('writing ' + currentPak);
-	};
-
-	var checkNextPart = function () {
-		if (splitThreshold) {
-			var stats = fs.statSync(currentPak);
-
-			if (stats.size >= splitThreshold) {
-				nextPart();
-			}
-		}
-	};
-
-	nextPart();
-
-	async.eachSeries(Object.keys(fileMap), function (relative, cb) {
+		var relative = files.shift();
 		var absolute = fileMap[relative];
 		var baseDir = path.normalize(absolute.replace(relative, ''));
 
 		exec('zip \"' + currentPak + '\" \"' + relative + '\"', { cwd: baseDir }, function (err) {
 			if (err) return cb(err);
-			checkNextPart();
-			cb();
+
+			if (splitThreshold) {
+				var stats = fs.statSync(currentPak);
+
+				if (stats.size >= splitThreshold) {
+					// went over the threshold, remove the file from the
+					// zip and put it into the next part
+					exec('zip -d \"' + currentPak + '\" \"' + relative + '\"', { cwd: baseDir }, function (err) {
+						if (err) return cb(err);
+
+						files.unshift(relative);
+
+						currentPak = nextPartName(pak);
+
+						logger.info('writing ' + currentPak);
+
+						nextFile();
+					});
+
+					return;
+				}
+			}
+
+			nextFile();
 		});
-	}, callback);
+	}
+
+	logger.info('writing ' + currentPak);
+
+	wrench.mkdirSyncRecursive(path.dirname(currentPak));
+
+	nextFile();
 }
 
-// initialize the graph with each game's files
+//
+// clean out old assets
+//
+getGames(dest).map(function (file) {
+	return path.join(dest, file);
+}).forEach(function (dir) {
+	logger.info('deleting ' + dir);
+	wrench.rmdirSyncRecursive(dir);
+});
+
+//
+// initialize the graph
+//
 var graph = new AssetGraph(baseGame, commonReferenceThreshold);
 
 getGames(src).forEach(function (game) {
@@ -348,7 +370,6 @@ tasks.push(function (cb) {
 	writePak(pakName, fileMap, commonPakMaxSize, cb);
 });
 
-// write out everything
 async.parallelLimit(tasks, os.cpus().length, function (err) {
 	if (err) throw err;
 });

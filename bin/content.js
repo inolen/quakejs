@@ -1,12 +1,18 @@
 var _ = require('underscore');
 var async = require('async');
-var crypto = require('crypto');
+var crc32 = require('buffer-crc32');
 var express = require('express');
 var fs = require('fs');
 var http = require('http');
+var logger = require('winston');
 var opt = require('optimist');
 var path = require('path');
+var send = require('send');
+var wrench = require('wrench');
 var zlib = require('zlib');
+
+logger.cli();
+logger.level = 'debug';
 
 var argv = require('optimist')
 	.options({
@@ -29,149 +35,105 @@ if (argv.h || argv.help) {
 	return;
 }
 
-var compressedAssets = [ '.js', '.pk3' ];
+var validAssets = ['.pk3', '.run', '.sh'];
+var chunkSize = 16 * 1024 * 1024;
 var currentManifest;
 
-function checksum(filename, callback) {
-	var sum = crypto.createHash('md5');
-	var s = fs.ReadStream(filename);
-	s.on('error', function (err) {
-		callback(err);
-	});
-	s.on('data', function (data) {
-		sum.update(data);
-	});
-	s.on('end', function () {
-		callback(null, sum.digest('hex'));
-	});
-}
-
-function getMods(callback) {
-	fs.readdir(argv.root, function(err, files) {
-		if (err) return callback(err);
-
-		async.filter(files, function (file, cb) {
-			var absolute = path.join(argv.root, file);
-			fs.stat(absolute, function (err, stats) {
-				if (err) return callback(err);
-
-				return cb(stats.isDirectory());
-			});
-		}, function (results) {
-			callback(null, results);
-		});
-	});
-}
-
-function getModFiles(mod, callback) {
-	var gamePath = path.join(argv.root, mod);
-	var valid = ['.js', '.pk3'];
-	
-	fs.readdir(gamePath, function(err, files) {
-		if (err) return callback(err);
-
-		async.filter(files, function (file, cb) {
-			var ext = path.extname(file);
-			cb(valid.indexOf(ext) !== -1);
-		}, function (files) {
-			// Convert files to absolute paths.
-			files = files.map(function (file) { return path.join(gamePath, file); });
-
-			callback(null, files);
-		});
+function getAssets() {
+	return wrench.readdirSyncRecursive(argv.root).filter(function (file) {
+		var ext = path.extname(file);
+		return validAssets.indexOf(ext) !== -1;
+	}).map(function (file) {
+		return path.join(argv.root, file);
 	});
 }
 
 function generateManifest(callback) {
-	console.log('generating manifest from ' + argv.root);
+	logger.info('generating manifest from ' + argv.root);
 
-	getMods(function (err, mods) {
-		if (err) return callback(err);
+	var assets = getAssets();
+	var start = Date.now();
 
-		async.concatSeries(mods, getModFiles, function (err, files) {
-			if (err) return callback(err);
+	async.map(assets, function (file, cb) {
+		logger.info('processing ' + file);
 
-			async.mapSeries(files, function (file, cb) {
-				console.log('processing ' + file);
+		var name = path.relative(argv.root, file);
+		var crc = crc32.unsigned('');
+		var compressed = 0;
+		var size = 0;
 
-				var length = 0;
-				var sum = crypto.createHash('md5');
+		// stream each file in, generating a hash for it's original
+		// contents, and gzip'ing the buffer to determine the compressed
+		// length for the client so it can present accurate progress info
+		var stream = fs.createReadStream(file);
 
-				// stream each file in, generating a hash for it's original
-				// contents, and gzip'ing the buffer to determine the compressed
-				// length for the client so it can present accurate progress info
-				var stream = fs.createReadStream(file);
+		// gzip the file contents to determine the compressed length
+		// of the file so the client can present correct progress info
+		var gzip = zlib.createGzip();
 
-				// gzip the file contents to determine the compressed length
-				// of the file so the client can present correct progress info
-				var gzip = zlib.createGzip();
+		stream.on('error', function (err) {
+			callback(err);
+		});
+		stream.on('data', function (data) {
+			crc = crc32.unsigned(data, crc);
+			size += data.length;
+			gzip.write(data);
+		});
+		stream.on('end', function () {
+			gzip.end();
+		});
 
-				stream.on('error', function (err) {
-					callback(err);
-				});
-				stream.on('data', function (data) {
-					gzip.write(data);
-					sum.update(data);
-				});
-				stream.on('end', function () {
-					gzip.end();
-				});
-
-				gzip.on('data', function (data) {
-					length += data.length;
-				});
-				gzip.on('end', function () {
-					cb(null, {
-						name: path.relative(argv.root, file),
-						size: length,
-						checksum: sum.digest('hex')
-					});
-				});
-			}, function (err, entries) {
-				if (err) return callback(err);
-				console.log('done generating manifest, ' + entries.length + ' entries');
-
-				callback(err, entries);
+		gzip.on('data', function (data) {
+			compressed += data.length;
+		});
+		gzip.on('end', function () {
+			cb(null, {
+				name: name,
+				compressed: compressed,
+				size: size,
+				checksum: crc
 			});
 		});
+	}, function (err, entries) {
+		if (err) return callback(err);
+		logger.info('generated manifest (' + entries.length + ' entries) in ' + ((Date.now() - start) / 1000) + ' seconds');
+
+		callback(err, entries);
 	});
 }
 
 function handleManifest(req, res, next) {
-	console.log('serving manifest');
+	logger.info('serving manifest to ' + req.ip);
 
 	res.json(currentManifest);
 }
 
-function handleStatic(req, res, next) {
-	var basename = req.params[0];
-	var absolutePath = path.join(argv.root, basename);
-
-	console.log('serving ' + basename);
-
-	res.sendfile(absolutePath);
-}
-
 function handleAsset(req, res, next) {
 	var basename = req.params[0];
-	var checksum = req.params[1];
+	var checksum = parseInt(req.params[1], 10);
 	var ext = req.params[2];
 	var relativePath = basename + ext;
 	var absolutePath = path.join(argv.root, relativePath);
 
-	// Make sure they're requesting a valid asset, else return a 400.
-	var valid = currentManifest.some(function (entry) {
-		return entry.name === relativePath && entry.checksum === checksum;
-	});
+	// make sure they're requesting a valid asset
+	var asset;
+	for (var i = 0; i < currentManifest.length; i++) {
+		var entry = currentManifest[i];
 
-	if (!valid) {
+		if (entry.name === relativePath && entry.checksum === checksum) {
+			asset = entry;
+			break;
+		}
+	}
+
+	if (!asset) {
 		res.status(400).end();
 		return;
 	}
 
-	console.log('serving ' + relativePath + ' ' + checksum);
+	logger.info('serving ' + relativePath + ' (crc32 ' + checksum + ') to ' + req.ip);
 
-	res.sendfile(absolutePath);
+	res.sendfile(absolutePath, { maxAge: Infinity });
 }
 
 function loadConfig() {
@@ -182,11 +144,11 @@ function loadConfig() {
 	var config = {};
 
 	try {
-		console.log('loading config file from ' + argv.config + '..');
+		logger.info('loading config file from ' + argv.config + '..');
 		var data = require(argv.config);
 		_.extend(config, data);
 	} catch (e) {
-		console.log('failed to load config', e);
+		logger.warn('failed to load config', e);
 	}
 
 	return config;
@@ -201,25 +163,21 @@ function loadConfig() {
 		res.setHeader('Access-Control-Allow-Origin', '*');
 		next();
 	});
-	app.use(express.compress({
-		filter: function(req, res) {
-			var ext = path.extname(req.url);
-			return (/json|text|javascript/).test(res.getHeader('Content-Type')) ||
-				compressedAssets.indexOf(ext) !== -1;
-		}
-	}));
+	app.use(express.compress({ filter: function(req, res) { return true; } }));
 	app.get('/assets/manifest.json', handleManifest);
-	app.get(/^\/assets\/(linuxq3ademo-1.11-6.x86.gz.sh|linuxq3apoint-1.32b-3.x86.run)$/, handleStatic);
-	app.get(/^\/assets\/(.+)\.(.+)(\.js|\.pk3)$/, handleAsset);
-
-	var server = http.createServer(app);
-	server.listen(argv.port, function () {
-		console.log('content server is now listening on port', server.address().address, server.address().port);
-	});
+	app.get(/^\/assets\/(.+?)\.(\d+)(.+?)(?:\.p(\d+))?$/, handleAsset);
 
 	// generate an initial manifest
 	generateManifest(function (err, manifest) {
 		if (err) throw err;
+
 		currentManifest = manifest;
+
+		// start listening
+		var server = http.createServer(app);
+
+		server.listen(argv.port, function () {
+			logger.info('content server is now listening on port', server.address().address, server.address().port);
+		});
 	});
 })();
