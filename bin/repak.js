@@ -19,6 +19,7 @@ var blacklist = [
 var whitelist = [
 	/\.cfg$/,
 	/\.qvm$/,
+	/scripts\/.+\.bot/,
 	/scripts\/.+\.txt/,
 	'botfiles/',
 	'fonts/',
@@ -234,7 +235,7 @@ function writePak(pak, fileMap, splitThreshold, callback) {
 
 	var part = 100;
 	var currentPak = nextPartName(pak);
-	var files = Object.keys(fileMap);
+	var files = Object.keys(fileMap).sort();
 
 	function nextPartName(pak) {
 		if (splitThreshold) {

@@ -95,6 +95,16 @@ function buildChallenge() {
 	return challenge;
 }
 
+function handleGetServers(conn, data) {
+	cursor
+		.brightGreen().write(conn.addr + ':' + conn.port).reset()
+		.write(' ---> ')
+		.magenta().write('getservers').reset()
+		.write('\n');
+
+	sendGetServersResponse(conn, servers);
+}
+
 function handleHeartbeat(conn, data) {
 	cursor
 		.brightGreen().write(conn.addr + ':' + conn.port).reset()
@@ -150,6 +160,7 @@ function sendGetServersResponse(conn, servers) {
 		msg += String.fromCharCode((server.port & 0xff00) >> 8);
 		msg += String.fromCharCode(server.port & 0xff);
 	}
+	msg += '\\EOT';
 
 	cursor
 		.brightGreen().write(conn.addr + ':' + conn.port).reset()
@@ -178,7 +189,7 @@ function updateServer(addr, port) {
 	}
 	server.lastUpdate = Date.now();
 
-	// Send partial update to all clients.
+	// send partial update to all clients
 	for (var i = 0; i < clients.length; i++) {
 		sendGetServersResponse(clients[i], { id: server });
 	}
@@ -219,7 +230,7 @@ function pruneServers() {
 function handleSubscribe(conn) {
 	addClient(conn);
 
-	// Send all servers upon subscribing.
+	// send all servers upon subscribing
 	sendGetServersResponse(conn, servers);
 }
 
@@ -262,11 +273,11 @@ function removeClient(conn) {
  *
  **********************************************************/
 function getRemoteAddress(ws) {
-	// By default, check the underlying socket's remote address.
+	// by default, check the underlying socket's remote address
 	var address = ws._socket.remoteAddress;
 
-	// If this is an x-forwarded-for header (meaning the request
-	// has been proxied), use it.
+	// if this is an x-forwarded-for header (meaning the request
+	// has been proxied), use it
 	if (ws.upgradeReq.headers['x-forwarded-for']) {
 		address = ws.upgradeReq.headers['x-forwarded-for'];
 	}
@@ -346,12 +357,16 @@ function loadConfig() {
 				return;
 			}
 
-			if (msg.indexOf('heartbeat ') === 0) {
+			if (msg.indexOf('getservers ') === 0) {
+				handleGetServers(conn, msg.substr(11));
+			} else if (msg.indexOf('heartbeat ') === 0) {
 				handleHeartbeat(conn, msg.substr(10));
 			} else if (msg.indexOf('infoResponse\n') === 0) {
 				handleInfoResponse(conn, msg.substr(13));
 			} else if (msg.indexOf('subscribe') === 0) {
 				handleSubscribe(conn);
+			} else {
+				console.error('unexpected message "' + msg + '"');
 			}
 		});
 

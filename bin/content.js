@@ -36,7 +36,7 @@ if (argv.h || argv.help) {
 }
 
 var validAssets = ['.pk3', '.run', '.sh'];
-var chunkSize = 16 * 1024 * 1024;
+var currentManifestTimestamp;
 var currentManifest;
 
 function getAssets() {
@@ -90,7 +90,6 @@ function generateManifest(callback) {
 			cb(null, {
 				name: name,
 				compressed: compressed,
-				size: size,
 				checksum: crc
 			});
 		});
@@ -104,6 +103,9 @@ function generateManifest(callback) {
 
 function handleManifest(req, res, next) {
 	logger.info('serving manifest to ' + req.ip);
+
+	res.setHeader('Cache-Control', 'public, max-age=60, must-revalidate');
+	res.setHeader('Last-Modified', currentManifestTimestamp.toUTCString());
 
 	res.json(currentManifest);
 }
@@ -171,6 +173,7 @@ function loadConfig() {
 	generateManifest(function (err, manifest) {
 		if (err) throw err;
 
+		currentManifestTimestamp = new Date();
 		currentManifest = manifest;
 
 		// start listening

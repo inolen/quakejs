@@ -1,18 +1,6 @@
 {
 	"games": {
-		"basejs": {
-			"exclude": [
-				"/q3dm\\d+\\.bsp/",
-				"/q3tourney\\d+\\.bsp/",
-				"maps/q3tourney6_ctf.bsp",
-				"models/players/brandon",
-				"models/players/carmack",
-				"models/players/cash",
-				"models/players/light",
-				"models/players/medium",
-				"models/players/paulj",
-				"models/players/tim"
-			],
+		"baseq3": {
 			"include": [
 				"textures/sfx/detail",
 				"textures/sfx/logo512"
@@ -20,10 +8,8 @@
 		},
 		"cpma": {
 			"exclude": [
-				"maps/cpm1a.bsp",
 				"maps/cpm2.bsp",
 				"maps/cpm3.bsp",
-				"maps/cpm3a.bsp",
 				"maps/cpm4.bsp",
 				"maps/cpm4a.bsp",
 				"maps/cpm5.bsp",
@@ -45,7 +31,6 @@
 				"maps/cpm19.bsp",
 				"maps/cpm20.bsp",
 				"maps/cpm21.bsp",
-				"maps/cpm22.bsp",
 				"maps/cpm23.bsp",
 				"maps/cpm24.bsp",
 				"maps/cpm25.bsp",
@@ -57,9 +42,15 @@
 				"maps/cpmctf1.bsp",
 				"maps/cpmctf2.bsp",
 				"maps/cpmctf3.bsp",
+				"maps/cpmctf4.bsp",
 				"maps/cpmctf5.bsp"
 			],
 			"include": [
+				"freezeShader",
+				"grappleRope",
+				"lagometer",
+				"lightningBolt",
+				"hud/",
 				"textures/effects/popsicle",
 				"textures/effects/SPactive",
 				"textures/effects/SPinactive"
@@ -71,24 +62,35 @@
 				"maps/duel1r2.bsp",
 				"maps/q3f_32smooth.bsp",
 				"maps/q3f_canalzone.bsp",
-				"maps/q3f_crossfire2.bsp",
 				"maps/q3f_civsaw.bsp",
+				"maps/q3f_crossfire2.bsp",
 				"maps/q3f_dungeonz.bsp",
 				"maps/q3f_h4rdcore.bsp",
+				"maps/q3f_hunted.bsp",
 				"maps/q3f_japanc.bsp",
+				"maps/q3f_lastresort.bsp",
+				"maps/q3f_muon.bsp",
 				"maps/q3f_nickelplated.bsp",
+				"maps/q3f_openfire2b.bsp",
 				"maps/q3f_orbitalctf.bsp",
 				"maps/q3f_requiem.bsp",
 				"maps/q3f_rock.bsp",
 				"maps/q3f_sewers.bsp",
+				"maps/q3f_siege.bsp",
+				"maps/q3f_smartbases2.bsp",
 				"maps/q3f_sorrow.bsp",
 				"maps/q3f_spazball.bsp",
 				"maps/q3f_sunburn.bsp",
 				"maps/q3f_tf2k.bsp",
+				"maps/q3f_ultima.bsp",
 				"maps/q3f_uwarfare.bsp",
 				"maps/q3f_vilify.bsp"
 			],
 			"include": [
+				"expboom",
+				"ftcore",
+				"ftflame",
+				"q3f_menu",
 				"textures/q3f_hud/"
 			],
 			"maps": {
@@ -115,9 +117,6 @@
 				"maps/ut_sands",
 				"maps/ut_streets2",
 				"maps/ut_twinlakesv2"
-			],
-			"include": [
-				"blood"
 			]
 		}
 	}
