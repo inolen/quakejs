@@ -1,1 +1,0 @@
-../ioq3/build/release-js-js/ioquake3.js

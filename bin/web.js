@@ -39,10 +39,10 @@ function loadConfig(configPath) {
 (function main() {
 	var app = express();
 
-	app.set('views', path.join(__dirname, '..', 'template'));
+	app.set('views', __dirname);
 	app.set('view engine', 'ejs');
 
-	app.use(express.static(path.join(__dirname, '..', 'public')));
+	app.use(express.static(path.join(__dirname, '..', 'build')));
 	app.use(function (req, res, next) {
 		res.locals.content = config.content;
 		res.render('index');
