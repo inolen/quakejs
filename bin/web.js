@@ -1,19 +1,12 @@
+var _ = require('underscore');
 var express = require('express');
 var http = require('http');
+var logger = require('winston');
 var opt = require('optimist');
 var path = require('path');
 
 var argv = require('optimist')
-	.options({
-		'port': {
-			'description': 'Server port',
-			'default': 8080
-		},
-		'content': {
-			'description': 'Content server root',
-			'default': 'localhost:9000'
-		}
-	})
+	.describe('config', 'Location of the configuration file').default('config', './config.json')
 	.argv;
 
 if (argv.h || argv.help) {
@@ -21,7 +14,29 @@ if (argv.h || argv.help) {
 	return;
 }
 
-function main() {
+logger.cli();
+logger.level = 'debug';
+
+var config = loadConfig(argv.config);
+
+function loadConfig(configPath) {
+	var config = {
+		port: 8080,
+		content: 'localhost:9000'
+	};
+
+	try {
+		logger.info('loading config file from ' + configPath + '..');
+		var data = require(configPath);
+		_.extend(config, data);
+	} catch (e) {
+		logger.warn('failed to load config', e);
+	}
+
+	return config;
+}
+
+(function main() {
 	var app = express();
 
 	app.set('views', path.join(__dirname, '..', 'template'));
@@ -29,16 +44,14 @@ function main() {
 
 	app.use(express.static(path.join(__dirname, '..', 'public')));
 	app.use(function (req, res, next) {
-		res.locals.content = argv.content;
+		res.locals.content = config.content;
 		res.render('index');
 	});
 
 	var server = http.createServer(app);
-	server.listen(argv.port, function () {
-		console.log('Web server is now listening on port', server.address().address, server.address().port);
+	server.listen(config.port, function () {
+		logger.info('web server is now listening on port', server.address().address, server.address().port);
 	});
 
 	return server;
-}
-
-main();
+})();

@@ -11,23 +11,8 @@ var send = require('send');
 var wrench = require('wrench');
 var zlib = require('zlib');
 
-logger.cli();
-logger.level = 'debug';
-
 var argv = require('optimist')
-	.options({
-		'config': {
-			'description': 'Location of optional configuration file'
-		},
-		'root': {
-			'description': 'Root assets path',
-			'default': path.join(__dirname, '..', 'assets')
-		},
-		'port': {
-			'description': 'Server port',
-			'default': 9000
-		}
-	})
+	.describe('config', 'Location of the configuration file').default('config', './config.json')
 	.argv;
 
 if (argv.h || argv.help) {
@@ -35,21 +20,25 @@ if (argv.h || argv.help) {
 	return;
 }
 
+logger.cli();
+logger.level = 'debug';
+
+var config = loadConfig(argv.config);
 var validAssets = ['.pk3', '.run', '.sh'];
 var currentManifestTimestamp;
 var currentManifest;
 
 function getAssets() {
-	return wrench.readdirSyncRecursive(argv.root).filter(function (file) {
+	return wrench.readdirSyncRecursive(config.root).filter(function (file) {
 		var ext = path.extname(file);
 		return validAssets.indexOf(ext) !== -1;
 	}).map(function (file) {
-		return path.join(argv.root, file);
+		return path.join(config.root, file);
 	});
 }
 
 function generateManifest(callback) {
-	logger.info('generating manifest from ' + argv.root);
+	logger.info('generating manifest from ' + config.root);
 
 	var assets = getAssets();
 	var start = Date.now();
@@ -57,7 +46,7 @@ function generateManifest(callback) {
 	async.map(assets, function (file, cb) {
 		logger.info('processing ' + file);
 
-		var name = path.relative(argv.root, file);
+		var name = path.relative(config.root, file);
 		var crc = crc32.unsigned('');
 		var compressed = 0;
 		var size = 0;
@@ -115,7 +104,7 @@ function handleAsset(req, res, next) {
 	var checksum = parseInt(req.params[1], 10);
 	var basename = req.params[2];
 	var relativePath = path.join(basedir, basename);
-	var absolutePath = path.join(argv.root, relativePath);
+	var absolutePath = path.join(config.root, relativePath);
 
 	// make sure they're requesting a valid asset
 	var asset;
@@ -138,16 +127,15 @@ function handleAsset(req, res, next) {
 	res.sendfile(absolutePath, { maxAge: Infinity });
 }
 
-function loadConfig() {
-	if (!argv.config) {
-		return null;
-	}
-
-	var config = {};
+function loadConfig(configPath) {
+	var config = {
+		root: path.join(__dirname, '..', 'assets'),
+		port: 9000
+	};
 
 	try {
-		logger.info('loading config file from ' + argv.config + '..');
-		var data = require(argv.config);
+		logger.info('loading config file from ' + configPath + '..');
+		var data = require(configPath);
 		_.extend(config, data);
 	} catch (e) {
 		logger.warn('failed to load config', e);
@@ -157,9 +145,6 @@ function loadConfig() {
 }
 
 (function main() {
-	var config = loadConfig();
-	if (config) _.extend(argv, config);
-
 	var app = express();
 	app.use(function (req, res, next) {
 		res.setHeader('Access-Control-Allow-Origin', '*');
@@ -179,7 +164,7 @@ function loadConfig() {
 		// start listening
 		var server = http.createServer(app);
 
-		server.listen(argv.port, function () {
+		server.listen(config.port, function () {
 			logger.info('content server is now listening on port', server.address().address, server.address().port);
 		});
 	});

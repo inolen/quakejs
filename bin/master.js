@@ -1,22 +1,13 @@
 var _ = require('underscore');
-var ansi = require('ansi');
 var http = require('http');
+var logger = require('winston');
 var opt = require('optimist');
 var url = require('url');
 var WebSocketClient = require('ws');
 var WebSocketServer = require('ws').Server;
-var cursor = ansi(process.stdout);
 
 var argv = require('optimist')
-	.options({
-		'config': {
-			'description': 'Location of optional configuration file'
-		},
-		'port': {
-			'description': 'Server port',
-			'default': 27950
-		}
-	})
+	.describe('config', 'Location of the configuration file').default('config', './config.json')
 	.argv;
 
 if (argv.h || argv.help) {
@@ -24,6 +15,10 @@ if (argv.h || argv.help) {
 	return;
 }
 
+logger.cli();
+logger.level = 'debug';
+
+var config = loadConfig(argv.config);
 var clients = [];
 var servers = {};
 var pruneInterval = 350 * 1000;
@@ -96,31 +91,19 @@ function buildChallenge() {
 }
 
 function handleGetServers(conn, data) {
-	cursor
-		.brightGreen().write(conn.addr + ':' + conn.port).reset()
-		.write(' ---> ')
-		.magenta().write('getservers').reset()
-		.write('\n');
+	logger.info(conn.addr + ':' + conn.port + ' ---> getservers');
 
 	sendGetServersResponse(conn, servers);
 }
 
 function handleHeartbeat(conn, data) {
-	cursor
-		.brightGreen().write(conn.addr + ':' + conn.port).reset()
-		.write(' ---> ')
-		.magenta().write('heartbeat').reset()
-		.write('\n');
+	logger.info(conn.addr + ':' + conn.port + ' ---> heartbeat');
 
 	sendGetInfo(conn);
 }
 
 function handleInfoResponse(conn, data) {
-	cursor
-		.brightGreen().write(conn.addr + ':' + conn.port).reset()
-		.write(' ---> ')
-		.magenta().write('infoResponse').reset()
-		.write('\n');
+	logger.info(conn.addr + ':' + conn.port + ' ---> infoResponse');
 
 	var info = parseInfoString(data);
 
@@ -132,11 +115,7 @@ function handleInfoResponse(conn, data) {
 function sendGetInfo(conn) {
 	var challenge = buildChallenge();
 
-	cursor
-		.brightGreen().write(conn.addr + ':' + conn.port).reset()
-		.write(' <--- ')
-		.magenta().write('getinfo with challenge \"' + challenge + '\"').reset()
-		.write('\n');
+	logger.info(conn.addr + ':' + conn.port + ' <--- getinfo with challenge \"' + challenge + '\"');
 
 	var buffer = formatOOB('getinfo ' + challenge);
 	conn.socket.send(buffer, { binary: true });
@@ -162,11 +141,7 @@ function sendGetServersResponse(conn, servers) {
 	}
 	msg += '\\EOT';
 
-	cursor
-		.brightGreen().write(conn.addr + ':' + conn.port).reset()
-		.write(' <--- ')
-		.magenta().write('getserversResponse with ' + Object.keys(servers).length + ' server(s)').reset()
-		.write('\n');
+	logger.info(conn.addr + ':' + conn.port + ' <--- getserversResponse with ' + Object.keys(servers).length + ' server(s)');
 
 	var buffer = formatOOB(msg);
 	conn.socket.send(buffer, { binary: true });
@@ -200,9 +175,7 @@ function removeServer(id) {
 
 	delete servers[id];
 
-	cursor
-		.brightGreen().write(server.addr + ':' + server.port).reset()
-		.write(' timed out, ' + Object.keys(servers).length + ' server(s) currently registered\n');
+	logger.info(server.addr + ':' + server.port + ' timed out, ' + Object.keys(servers).length + ' server(s) currently registered');
 }
 
 function pruneServers() {
@@ -241,11 +214,7 @@ function addClient(conn) {
 		return;  // already subscribed
 	}
 
-	cursor
-		.brightGreen().write(conn.addr + ':' + conn.port).reset()
-		.write(' ---> ')
-		.magenta().write('subscribe').reset()
-		.write('\n');
+	logger.info(conn.addr + ':' + conn.port + ' ---> subscribe');
 
 	clients.push(conn);
 }
@@ -258,11 +227,7 @@ function removeClient(conn) {
 
 	var conn = clients[idx];
 
-	cursor
-		.brightGreen().write(conn.addr + ':' + conn.port).reset()
-		.write(' ---> ')
-		.magenta().write('unsubscribe').reset()
-		.write('\n');
+	logger.info(conn.addr + ':' + conn.port + ' ---> unsubscribe');
 
 	clients.splice(idx, 1);
 }
@@ -301,16 +266,14 @@ function connection(ws) {
 	this.port = getRemotePort(ws);
 }
 
-function loadConfig() {
-	if (!argv.config) {
-		return null;
-	}
-
-	var config = {};
+function loadConfig(configPath) {
+	var config = {
+		port: 27950
+	};
 
 	try {
-		console.log('Loading config file from ' + argv.config + '..');
-		var data = require(argv.config);
+		console.log('Loading config file from ' + configPath + '..');
+		var data = require(configPath);
 		_.extend(config, data);
 	} catch (e) {
 		console.log('Failed to load config', e);
@@ -320,9 +283,6 @@ function loadConfig() {
 }
 
 (function main() {
-	var config = loadConfig();
-	if (config) _.extend(argv, config);
-
 	var server = http.createServer();
 
 	var wss = new WebSocketServer({
@@ -379,7 +339,7 @@ function loadConfig() {
 		});
 	});
 
-	server.listen(argv.port, function() {
+	server.listen(config.port, function() {
 		console.log('master server is listening on port ' + server.address().port);
 	});
 

@@ -38,9 +38,30 @@ var whitelist = [
 logger.cli();
 logger.level = 'debug';
 
-var src = process.argv[2];
-var dest = process.argv[3];
-var config = loadConfig();
+var argv = require('optimist')
+	.options({
+		'config': {
+			'description': 'Repak asset config script',
+			'default': path.join(__dirname, 'repak-config.json')
+		},
+		'src': {
+			'description': 'Source directory'
+		},
+		'dest': {
+			'description': 'Destination directory'
+		}
+	})
+	.demand(['src', 'dest'])
+	.argv;
+
+if (argv.h || argv.help) {
+	opt.showHelp();
+	return;
+}
+
+var src = argv.src;
+var dest = argv.dest;
+var config = loadConfig(argv.config);
 
 function MatchList(entries) {
 	this.entries = entries;
@@ -66,7 +87,7 @@ MatchList.prototype.matches = function (item) {
 	return false;
 };
 
-function loadConfig() {
+function loadConfig(configPath) {
 	var config;
 
 	// convert strings that look like regular expressions to RegExp instances
@@ -79,7 +100,9 @@ function loadConfig() {
 	};
 
 	try {
-		config = require(__dirname + '/repak-config.json');
+		logger.info('loading config file from ' + configPath + '..');
+
+		config = require(configPath);
 
 		config.games = config.games || {};
 
@@ -202,7 +225,7 @@ function transformFile(src) {
 	// do the transform
 	var result = execSync('opusenc ' + src + ' ' + dest);
 	if (result.code) {
-		console.log('.. failed to opus encode ' + src);
+		logger.error('.. failed to opus encode ' + src);
 		return src;
 	}
 
