@@ -111,10 +111,10 @@ function handleManifest(req, res, next) {
 }
 
 function handleAsset(req, res, next) {
-	var basename = req.params[0];
+	var basedir = req.params[0];
 	var checksum = parseInt(req.params[1], 10);
-	var ext = req.params[2];
-	var relativePath = basename + ext;
+	var basename = req.params[2];
+	var relativePath = path.join(basedir, basename);
 	var absolutePath = path.join(argv.root, relativePath);
 
 	// make sure they're requesting a valid asset
@@ -167,7 +167,7 @@ function loadConfig() {
 	});
 	app.use(express.compress({ filter: function(req, res) { return true; } }));
 	app.get('/assets/manifest.json', handleManifest);
-	app.get(/^\/assets\/(.+?)\.(\d+)(.+?)(?:\.p(\d+))?$/, handleAsset);
+	app.get(/^\/assets\/(.+\/|)(\d+)-(.+?)$/, handleAsset);
 
 	// generate an initial manifest
 	generateManifest(function (err, manifest) {
