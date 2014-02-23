@@ -51,13 +51,15 @@ node build/ioq3ded.js +set fs_game <game> +set dedicated 1 +exec <server_config>
 
 *Note: for the initial download of game files you will need a server wth around 1GB of RAM. If the server exits with the message `Killed` then you need more memory*
 
-On your server clone this repository. `cd` into the `quakejs` clone and run 
+On your server clone this repository. `cd` into the `quakejs` clone and run the following commands:
 
 ```
+git submodule update --init
+npm install
 node build/ioq3ded.js +set fs_game baseq3 +set dedicated 2
 ```
 
-continue pressing Enter until you have read the EULA, and then answer the `Agree? (y/n):` prompt. The base game files will download. When they have finished press Ctrl+C to quit the server.
+After running the last command continue pressing Enter until you have read the EULA, and then answer the `Agree? (y/n)` prompt. The base game files will download. When they have finished press Ctrl+C to quit the server.
 
 In the newly created `base/baseq3` directory add a file called `server.cfg` with the following contents (adapted from [Quake 3 World](http://www.quake3world.com/q3guide/servers.html)):
 
