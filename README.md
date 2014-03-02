@@ -31,9 +31,7 @@ node bin/web.js --config bin/web.json
 
 If you'd like to run a dedicated server, the only snag is that unlike regular Quake 3, you'll need to double check the content server to make sure it supports the mod / maps you want your server to run (which you can deduce from the [public manifest](http://content.quakejs.com/assets/manifest.json)).
 
-
 Also, networking in QuakeJS is done through WebSockets, which unfortunately means that native builds and web builds currently can't interact with eachother.
-
 
 Otherwise, running a dedicated server is similar to running a dedicated native server command-line wise.
 
@@ -48,6 +46,49 @@ If you'd just like to run a dedicated server that isn't broadcast to the master 
 ```shell
 node build/ioq3ded.js +set fs_game <game> +set dedicated 1 +exec <server_config>
 ```
+
+### baseq3 server, step-by-step
+
+*Note: for the initial download of game files you will need a server wth around 1GB of RAM. If the server exits with the message `Killed` then you need more memory*
+
+On your server clone this repository. `cd` into the `quakejs` clone and run the following commands:
+
+```
+git submodule update --init
+npm install
+node build/ioq3ded.js +set fs_game baseq3 +set dedicated 2
+```
+
+After running the last command continue pressing Enter until you have read the EULA, and then answer the `Agree? (y/n)` prompt. The base game files will download. When they have finished press Ctrl+C to quit the server.
+
+In the newly created `base/baseq3` directory add a file called `server.cfg` with the following contents (adapted from [Quake 3 World](http://www.quake3world.com/q3guide/servers.html)):
+
+```
+seta sv_hostname "CHANGE ME"
+seta sv_maxclients 12
+seta g_motd "CHANGE ME"
+seta g_quadfactor 3
+seta g_gametype 0
+seta timelimit 15
+seta fraglimit 25
+seta g_weaponrespawn 3
+seta g_inactivity 3000
+seta g_forcerespawn 0
+seta rconpassword "CHANGE_ME"
+set d1 "map q3dm7 ; set nextmap vstr d2"
+set d2 "map q3dm17 ; set nextmap vstr d1"
+vstr d1
+```
+
+replacing the `sv_hostname`, `g_motd` and `rconpassword`, and any other configuration options you desire.
+
+You can now run the server with 
+
+```
+node build/ioq3ded.js +set fs_game baseq3 +set dedicated 2 +exec server.cfg
+```
+
+and you should be able to join at http://www.quakejs.com/play?connect%20SERVER_IP:27960, replacing `SERVER_IP` with the IP of your server.
 
 ## Running a content server
 
