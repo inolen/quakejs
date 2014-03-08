@@ -21,10 +21,25 @@ To note, if you're trying to run a dedicated server, the most up to date binarie
 
 ## Running locally
 
+Install the required node.js modules:
+
+```shell
+npm install
+```
+
+Set `content.quakejs.com` as the content server:
+
 ```shell
 echo '{ "content": "content.quakejs.com" }' > bin/web.json
-node bin/web.js --config bin/web.json
 ```
+
+Run the server:
+
+```shell
+node bin/web.js --config ./web.json
+```
+
+Your server is now running on: [http://0.0.0.0:8080](http://0.0.0.0:8080)
 
 
 ## Running a dedicated server
