@@ -62,6 +62,8 @@
 	</body>
 
 	<script>
+		var ioq3 = {};
+
 		function getQueryCommands() {
 			var search = /([^&=]+)/g;
 			var query  = window.location.search.substring(1);
@@ -101,8 +103,9 @@
 			// merge default args with query string args
 			var args = ['+set', 'fs_cdn', '<%= content %>'];
 			args.push.apply(args, getQueryCommands());
-			ioq3.callMain(args);
+			ioq3.onRuntimeInitialized = function() { ioq3.callMain(args); };
+			
 		};
 	</script>
-	<script type="text/javascript" src="/ioquake3.js"></script>
+	<script async type="text/javascript" src="/ioquake3.js"></script>
 </html>
