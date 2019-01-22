@@ -18945,7 +18945,7 @@ function copyTempDouble(ptr) {
             panner.maxDistance = src.maxDistance;
             panner.rolloffFactor = src.rolloffFactor;
             panner.setPosition(src.position[0], src.position[1], src.position[2]);
-            panner.setVelocity(src.velocity[0], src.velocity[1], src.velocity[2]);
+            //panner.setVelocity(src.velocity[0], src.velocity[1], src.velocity[2]);
             panner.connect(AL.currentContext.ctx.destination);
   
             // Disconnect from the default source.
@@ -19120,7 +19120,7 @@ function copyTempDouble(ptr) {
         var y = HEAPF32[(((values)+(4))>>2)];
         var z = HEAPF32[(((values)+(8))>>2)];
         AL.currentContext.ctx.listener._velocity = [x, y, z];
-        AL.currentContext.ctx.listener.setVelocity(x, y, z);
+        //AL.currentContext.ctx.listener.setVelocity(x, y, z);
         break;
       case 0x100F /* AL_ORIENTATION */:
         var x = HEAPF32[((values)>>2)];
@@ -19198,7 +19198,7 @@ function copyTempDouble(ptr) {
           },
           set velocity(val) {
             this._velocity = val;
-            if (this.panner) this.panner.setVelocity(val[0], val[1], val[2]);
+            //if (this.panner) this.panner.setVelocity(val[0], val[1], val[2]);
           },
           get direction() {
             return this._direction || [0, 0, 0];
@@ -20216,7 +20216,8 @@ function copyTempDouble(ptr) {
   			var start = Date.now();
   
   			var module = VM.CompileModule(name, instructionCount, headerp + codeOffset, dataBase);
-  			vm = eval(module)();
+  			var indirectEval = eval;
+  			vm = indirectEval(module)();
   
   			SYSC.Print('VM file ' + name + ' compiled in ' + (Date.now() - start) + ' milliseconds');
   		} catch (e) {
@@ -21119,7 +21120,7 @@ function copyTempDouble(ptr) {
       var gamepads = SDL.getGamepads();
       // The length is not the number of gamepads; check which ones are defined.
       for (var i = 0; i < gamepads.length; i++) {
-        if (gamepads[i] !== undefined) count++;
+        if (gamepads[i] !== undefined && gamepads[i] !== null) count++;
       }
       return count;
     }
