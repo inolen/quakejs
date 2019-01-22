@@ -1,7 +1,7 @@
 var _ = require('underscore');
 var express = require('express');
 var http = require('http');
-var logger = require('winston');
+const { createLogger, format, transports } = require('winston');
 var opt = require('optimist');
 var path = require('path');
 
@@ -14,7 +14,10 @@ if (argv.h || argv.help) {
 	return;
 }
 
-logger.cli();
+const logger = createLogger({
+  format: format.simple(),
+  transports: [new transports.Console()]
+});
 logger.level = 'debug';
 
 var config = loadConfig(argv.config);
@@ -50,7 +53,7 @@ function loadConfig(configPath) {
 
 	var server = http.createServer(app);
 	server.listen(config.port, function () {
-		logger.info('web server is now listening on port', server.address().address, server.address().port);
+		logger.info('web server is now listening on ' +  server.address().address + ":" + server.address().port);
 	});
 
 	return server;
