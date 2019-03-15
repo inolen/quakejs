@@ -1,7 +1,7 @@
 var _ = require('underscore');
 var express = require('express');
 var http = require('http');
-const { createLogger, format, transports } = require('winston');
+var logger = require('winston');
 var opt = require('optimist');
 var path = require('path');
 
@@ -14,10 +14,7 @@ if (argv.h || argv.help) {
 	return;
 }
 
-const logger = createLogger({
-  format: format.simple(),
-  transports: [new transports.Console()]
-});
+logger.cli();
 logger.level = 'debug';
 
 var config = loadConfig(argv.config);
