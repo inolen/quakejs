@@ -9,8 +9,9 @@
 #OPTIONAL first parameters ($1) = address of alternate quakejs content server
 
 #EXAMPLE USAGE
-#./get_assets.sh /my/output/folder
-#./get_assets.sh /my/output/folder http://alternate.content.server.com
+#./get_assets.sh
+#./get_assets.sh /alternate/output/folder
+#./get_assets.sh /alternate/output/folder http://alternate.content.server.com
 
 #Setup output folder
 #Default to "."
