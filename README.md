@@ -83,7 +83,7 @@ seta sv_hostname "CHANGE ME"
 seta sv_maxclients 12
 seta g_motd "CHANGE ME"
 seta g_quadfactor 3
-seta g_gametype 0y yyy y
+seta g_gametype 0
 seta timelimit 15
 seta fraglimit 25
 seta g_weaponrespawn 3
@@ -144,5 +144,3 @@ Copy `init.d/quakejs` to `/etc/init.d/`, make it executable, and enable it by ru
 ## License
 
 MIT
-
-
