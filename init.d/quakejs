@@ -1,0 +1,68 @@
+#!/bin/sh
+#
+### BEGIN INIT INFO
+# Provides:		quakejs
+# Required-Start:	$network
+# Required-Stop:
+# Default-Start:	2 3 4 5
+# Default-Stop:
+# Short-Description:	QuakeJS Server Daemon
+### END INIT INFO
+#
+# /etc/init.d/quakejs
+# Subsystem file for "quakejs" server
+#
+# chkconfig: 2345 95 05
+# description: QuakeJS server daemon
+#
+# processname: quakejs
+# pidfile: /var/run/quakejs.pid
+
+RETVAL=0
+prog="quakejs"
+
+start() {
+	echo "Starting $prog:"
+	daemonize -v -p /var/run/$prog.pid -c /home/quake/quakejs -u quake /usr/bin/node build/ioq3ded.js +set fs_game baseq3 set dedicated 1 +exec server.cfg
+	RETVAL=$?
+	[ "$RETVAL" = 0 ] && touch /var/lock/subsys/$prog
+	echo
+}
+
+stop() {
+	echo "Stopping $prog:"
+	killproc $prog -TERM
+	RETVAL=$?
+	[ "$RETVAL" = 0 ] && rm -f /var/lock/subsys/$prog
+	echo
+}
+
+case "$1" in
+	start)
+		start
+		;;
+	stop)
+		stop
+		;;
+	restart)
+		stop
+		sleep 3
+		start
+		;;
+	condrestart)
+		if [ -f /var/lock/subsys/$prog ] ; then
+			stop
+			# avoid race
+			sleep 3
+			start
+		fi
+		;;
+	status)
+		status $prog
+		RETVAL=$?
+		;;
+	*)
+		echo $"Usage: $0 {start|stop|restart|condrestart|status}"
+		RETVAL=1
+esac
+exit $RETVAL
