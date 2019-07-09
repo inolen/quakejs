@@ -8,6 +8,11 @@
 #
 # processname: quakejs
 # pidfile: /var/run/quakejs.pid
+#
+# script assumes QuakeJS is installed/cloned
+# to '/home/quake/quakejs' and that the user
+# 'quake' will run the game server. Change
+# line 19 to adjust this
 
 RETVAL=0
 prog="quakejs"
