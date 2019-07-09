@@ -1,5 +1,14 @@
 #!/bin/sh
 #
+### BEGIN INIT INFO
+# Provides:		quakejs
+# Required-Start:	$network
+# Required-Stop:
+# Default-Start:	2 3 4 5
+# Default-Stop:
+# Short-Description:	QuakeJS Server Daemon
+### END INIT INFO
+#
 # /etc/init.d/quakejs
 # Subsystem file for "quakejs" server
 #
@@ -8,11 +17,6 @@
 #
 # processname: quakejs
 # pidfile: /var/run/quakejs.pid
-#
-# script assumes QuakeJS is installed/cloned
-# to '/home/quake/quakejs' and that the user
-# 'quake' will run the game server. Change
-# line 19 to adjust this
 
 RETVAL=0
 prog="quakejs"
