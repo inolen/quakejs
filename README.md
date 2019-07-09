@@ -137,7 +137,7 @@ Configure a dedicated local server as described above in **Running a dedicated s
 
 Copy the files from `html` to your web server's root folder.  Run `html/get_assets.sh` to download files from http://content.quakejs.com.  Rename *quakejs* on line 77 of `html/index.html` to your server's hostname.
 
-Copy `init.d/quakejs` to `/etc/init.d/`, make it executable, and enable it by running `sudo update-rc.d quakejs defaults` (under Debian).
+Copy `init.d/quakejs` to `/etc/init.d/`, make it executable, and enable it by running `sudo update-rc.d quakejs defaults` and `sudo systemctl enable quakejs` (under Debian).
 
 *Step by step instructions can be found at https://steamforge.net/wiki/index.php/How_to_setup_a_local_QuakeJS_server_under_Debian_9*
 
