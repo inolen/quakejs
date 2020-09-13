@@ -99,7 +99,7 @@
 			window.addEventListener('resize', resizeViewport);
 
 			// merge default args with query string args
-			var args = ['+set', 'fs_cdn', '<%= content %>'];
+			var args = ['+set', 'fs_cdn', '<%= content %>', '+set', 'sv_master1', '<%= master %>'];
 			args.push.apply(args, getQueryCommands());
 			ioq3.callMain(args);
 		};
