@@ -22,7 +22,8 @@ var config = loadConfig(argv.config);
 function loadConfig(configPath) {
 	var config = {
 		port: 8080,
-		content: 'localhost:9000'
+		content: 'localhost:9000',
+		master: 'master.quakejs.com'
 	};
 
 	try {
@@ -45,6 +46,7 @@ function loadConfig(configPath) {
 	app.use(express.static(path.join(__dirname, '..', 'build')));
 	app.use(function (req, res, next) {
 		res.locals.content = config.content;
+		res.locals.master = config.master;
 		res.render('index');
 	});
 
