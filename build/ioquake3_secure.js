@@ -15224,7 +15224,7 @@ function copyTempDouble(ptr) {
   		},DownloadAsset:function (asset, onprogress, onload) {
   			var root = SYSC.GetCDN();
   			var name = asset.name.replace(/(.+\/|)(.+?)$/, '$1' + asset.checksum + '-$2');
-  			var url = 'http://' + root + '/assets/' + name;
+  			var url = 'https://' + root + '/assets/' + name;
   
   			SYS.DoXHR(url, {
   				dataType: 'arraybuffer',
@@ -15274,7 +15274,7 @@ function copyTempDouble(ptr) {
   			var fs_game = Pointer_stringify(_Cvar_VariableString(allocate(intArrayFromString('fs_game'), 'i8', ALLOC_STACK)));
   			var com_basegame = Pointer_stringify(_Cvar_VariableString(allocate(intArrayFromString('com_basegame'), 'i8', ALLOC_STACK)));
   			var mapname = Pointer_stringify(_Cvar_VariableString(allocate(intArrayFromString('mapname'), 'i8', ALLOC_STACK)));
-  			var url = 'http://' + fs_cdn + '/assets/manifest.json';
+  			var url = 'https://' + fs_cdn + '/assets/manifest.json';
   
   			function isInstaller(name) {
   				return SYSC.installers.some(function (installer) {
