@@ -16594,7 +16594,7 @@ function copyTempDouble(ptr) {
           } else {
             // create the actual websocket object and connect
             try {
-              var url = 'ws://' + addr + ':' + port;
+              var url = 'wss://' + addr + ':' + port;
               // the node ws library API is slightly different than the browser's
               var opts = ENVIRONMENT_IS_NODE ? {headers: {'websocket-protocol': ['binary']}} : ['binary'];
               // If node we use the ws library.
