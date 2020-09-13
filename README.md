@@ -129,6 +129,25 @@ Note: `./assets` is assumed to be the default asset directory. If you'd like to 
 
 Once the content server is available, you can use it by launching your local or dedicated server with `+set fs_cdn <server_address>`.
 
+## Running Secure Servers (Content, Dedicated, and Web) Quick-Start
+
+1. Follow the [baseq3 server, step-by-step](#baseq3-server-step-by-step) instructions to initialize your repo, get `base/` assets and start a dedicated server config.
+2. Set up your `./assets` directory for the content server using the instructions in [Running a content server](#running-a-content-server).
+3. Point all the `bin/*_secure.json` configs to your key and cert (if you don't already have some, you can get some for free using [certbot](https://certbot.eff.org/)). Also make sure to point the `web_secure.json` to your own domain for the content server.
+4. `node bin/content.js --config ./content_secure.json`
+5. `node build/ioq3ded_secure.js +set dedicated 1 +set fs_cdn <your_domain>:9000 +set fs_game baseq3 +exec server.cfg`
+6. `node bin/wssproxy.js --config ./wssproxy.json`
+7. `node bin/web.js --config ./web.json` (you may want to customize this server config so it serves on port 443)
+
+You now have a content server running securely on port 9000, a dedicated server on (insecure) port 27960 (this one should be kept private, behind a firewall), a wss:// proxy running securely on port 27961, and a secure web server running on (ideally) port 443. Make sure ports 443, 9000, and 27961 are forwarded through your firewall so clients can connect to them.
+
+Now you (and others) can connect to your secure dedicated server at `https://<SERVER_DOMAIN>/play?connect%20<SERVER_DOMAIN>:27961`, replacing `<SERVER_DOMAIN>` with the domain of your server (must match your SSL certificate).
+
+### Notes
+
+* Secure and insecure servers are incompatible. A secure web server cannot talk to an insecure content server, a secure content server cannot talk to an insecure dedicated server, etc.
+* Master servers cannot work securely since they use IP addresses directly, so the browser would be unable to validate the SSL certificate. You can only connect directly to a known secure dedicated server using the URL above.
+
 ## License
 
 MIT
