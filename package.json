@@ -19,6 +19,7 @@
     "ejs": "~0.8.4",
     "execSync": "~1.0.1-pre",
     "express": "~3.3.5",
+    "http-proxy": "^1.18.1",
     "optimist": "~0.6.0",
     "quakejs-files": "0.0.3",
     "send": "^0.16.2",

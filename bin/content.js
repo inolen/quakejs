@@ -4,6 +4,7 @@ var crc32 = require('buffer-crc32');
 var express = require('express');
 var fs = require('fs');
 var http = require('http');
+var https = require('https');
 var logger = require('winston');
 var opt = require('optimist');
 var path = require('path');
@@ -161,11 +162,23 @@ function loadConfig(configPath) {
 		currentManifestTimestamp = new Date();
 		currentManifest = manifest;
 
-		// start listening
-		var server = http.createServer(app);
+		var server = null;
+		var serverType = null;
+		if (secure = config.key !== undefined && config.cert !== undefined) {
+			const opts = {
+				key: fs.readFileSync(config.key),
+				cert: fs.readFileSync(config.cert)
+			};
+			server = https.createServer(opts, app);
+			serverType = 'https';
+		} else {
+			server = http.createServer(app);
+			serverType = 'http';
+		}
 
+		// start listening
 		server.listen(config.port, function () {
-			logger.info('content server is now listening on port', server.address().address, server.address().port);
+			logger.info(serverType, 'content server is now listening on port', server.address().address, server.address().port);
 		});
 	});
 })();
