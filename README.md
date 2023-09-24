@@ -7,6 +7,8 @@ To see a live demo, check out [http://www.quakejs.com](http://www.quakejs.com).
 
 ## Building binaries
 
+To note, if you're trying to run a dedicated server, the most up to date binaries are already included in the `build` directory of this repository. You can proceed directly to the next section if you wish to use the included binaries.
+
 As a prerequisite, you'll need to have a working build of [Emscripten](http://github.com/kripken/emscripten), then:
 
 ```shell
@@ -16,7 +18,6 @@ make PLATFORM=js EMSCRIPTEN=<path_to_emscripten>
 
 Binaries will be placed in `ioq3/build/release-js-js/`.
 
-To note, if you're trying to run a dedicated server, the most up to date binaries are already included in the `build` directory of this repository.
 
 
 ## Running locally
@@ -31,6 +32,12 @@ Set `content.quakejs.com` as the content server:
 
 ```shell
 echo '{ "content": "content.quakejs.com" }' > bin/web.json
+```
+
+On windows, do not include the outer ':
+
+```commandline
+echo { "content": "content.quakejs.com" } > bin/web.json
 ```
 
 Run the server:
