@@ -39,7 +39,7 @@ Run the server:
 node bin/web.js --config ./web.json
 ```
 
-Your server is now running on: [http://0.0.0.0:8080](http://0.0.0.0:8080)
+Your server is now running on: [http://0.0.0.0:8080](http://127.0.0.1:8080/)
 
 
 ## Running a dedicated server
