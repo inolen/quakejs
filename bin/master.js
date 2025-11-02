@@ -1,350 +1,303 @@
-var _ = require('underscore');
-var http = require('http');
-var logger = require('winston');
-var opt = require('optimist');
-var url = require('url');
-var WebSocketClient = require('ws');
-var WebSocketServer = require('ws').Server;
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import util from 'node:util';
 
-var argv = require('optimist')
-	.describe('config', 'Location of the configuration file').default('config', './config.json')
-	.argv;
+import { Http3Server } from '@fails-components/webtransport';
 
-if (argv.h || argv.help) {
-	opt.showHelp();
-	return;
+/* process command line */
+let args;
+
+try {
+  args = util.parseArgs({
+    options: {
+      help: { type: 'boolean' },
+      cert: { type: 'string' },
+      key: { type: 'string' },
+      port: { type: 'string', default: '27950' }
+    }
+  });
+
+  if (args.values.help) {
+    throw new Error();
+  }
+
+  if (!args.values.cert) {
+    throw new Error('Missing required argument --cert');
+  }
+
+  if (!args.values.key) {
+    throw new Error('Missing required argument --key');
+  }
+} catch (e) {
+  console.error('Usage: master.js --cert <cert.pem> --key <key.pem> [--port <num>]');
+
+  if (e.message) {
+    console.error();
+    console.error(e.message);
+  }
+
+  process.exit(1);
 }
 
-logger.cli();
-logger.level = 'debug';
+/* -- clients ----------------------------------------------------------------------------------- */
 
-var config = loadConfig(argv.config);
-var clients = [];
-var servers = {};
-var pruneInterval = 350 * 1000;
+const clients = [];
 
-function formatOOB(data) {
-	var str = '\xff\xff\xff\xff' + data + '\x00';
+function removeClient (session) {
+  const idx = clients.indexOf(session);
 
-	var buffer = new ArrayBuffer(str.length);
-	var view = new Uint8Array(buffer);
+  if (idx === -1) {
+    return;
+  }
 
-	for (var i = 0; i < str.length; i++) {
-		view[i] = str.charCodeAt(i);
-	}
-
-	return buffer;
+  clients.splice(idx, 1);
 }
 
-function stripOOB(buffer) {
-	var view = new DataView(buffer);
+function addClient (session) {
+  const idx = clients.indexOf(session);
 
-	if (view.getInt32(0) !== -1) {
-		return null;
-	}
+  if (idx !== -1) {
+    return;
+  }
 
-	var str = '';
-	for (var i = 4 /* ignore leading -1 */; i < buffer.byteLength - 1 /* ignore trailing \0 */; i++) {
-		var c = String.fromCharCode(view.getUint8(i));
-		str += c;
-	}
-
-	return str;
+  clients.push(session);
 }
 
-function parseInfoString(str) {
-	var data = {};
+function handleSubscribe (session) {
+  addClient(session);
 
-	var split = str.split('\\');
-	// throw when split.length isn't even?
-
-	for (var i = 0; i < split.length - 1; i += 2) {
-		var key = split[i];
-		var value = split[i+1];
-		data[key] = value;
-	}
+  /* send all servers upon subscribing */
+  sendGetServersResponse(session, servers);
 }
 
-/**********************************************************
- *
- * messages
- *
- **********************************************************/
-var CHALLENGE_MIN_LENGTH = 9;
-var CHALLENGE_MAX_LENGTH = 12;
+/* -- servers ----------------------------------------------------------------------------------- */
 
-function buildChallenge() {
-	var challenge = '';
-	var length = CHALLENGE_MIN_LENGTH - 1 +
-		parseInt(Math.random() * (CHALLENGE_MAX_LENGTH - CHALLENGE_MIN_LENGTH + 1), 10);
+const SERVER_PRUNE_INTERVAL = 350 * 1000;
+const servers = {};
 
-	for (var i = 0; i < length; i++) {
-		var c;
-		do {
-			c = Math.floor(Math.random() * (126 - 33 + 1) + 33); // -> 33 ... 126 (inclusive)
-		} while (c === '\\'.charCodeAt(0) || c === ';'.charCodeAt(0) || c === '"'.charCodeAt(0) || c === '%'.charCodeAt(0) || c === '/'.charCodeAt(0));
-
-		challenge += String.fromCharCode(c);
-	}
-
-	return challenge;
+function serverid (addr, port) {
+  return `${addr}:${port}`;
 }
 
-function handleGetServers(conn, data) {
-	logger.info(conn.addr + ':' + conn.port + ' ---> getservers');
+function updateServer (addr, port, info) {
+  const id = serverid(addr, port);
+  let server = servers[id];
 
-	sendGetServersResponse(conn, servers);
+  if (!server) {
+    server = servers[id] = { addr, port };
+  }
+
+  /* FIXME does anything use info... */
+  server.lastUpdate = Date.now();
+  server.info = info;
+
+  /* send partial update to all clients */
+  for (const client of clients) {
+    sendGetServersResponse(client, { id: server });
+  }
 }
 
-function handleHeartbeat(conn, data) {
-	logger.info(conn.addr + ':' + conn.port + ' ---> heartbeat');
+function removeServer (id) {
+  delete servers[id];
 
-	sendGetInfo(conn);
+  console.log(`${id} timed out, ${Object.keys(servers).length} server(s) currently registered`);
 }
 
-function handleInfoResponse(conn, data) {
-	logger.info(conn.addr + ':' + conn.port + ' ---> infoResponse');
+function pruneServers () {
+  const now = Date.now();
 
-	var info = parseInfoString(data);
+  for (const [id, server] of Object.entries(servers)) {
+    const delta = now - server.lastUpdate;
 
-	// TODO validate data
-
-	updateServer(conn.addr, conn.port);
+    if (delta > SERVER_PRUNE_INTERVAL) {
+      removeServer(id);
+    }
+  }
 }
 
-function sendGetInfo(conn) {
-	var challenge = buildChallenge();
+/* -- messages ---------------------------------------------------------------------------------- */
 
-	logger.info(conn.addr + ':' + conn.port + ' <--- getinfo with challenge \"' + challenge + '\"');
+const CHALLENGE_MIN_LENGTH = 9;
+const CHALLENGE_MAX_LENGTH = 12;
 
-	var buffer = formatOOB('getinfo ' + challenge);
-	conn.socket.send(buffer, { binary: true });
+function prettyOOB (msg) {
+  let pretty = '';
+
+  for (let i = 0; i < msg.length; i++) {
+    if (msg[i] >= 32 && msg[i] <= 126) {
+      pretty += String.fromCharCode(msg[i]);
+    } else {
+      pretty += `\\x${msg[i].toString(16).padStart(2, '0')}`;
+    }
+  }
+
+  return pretty;
 }
 
-function sendGetServersResponse(conn, servers) {
-	var msg = 'getserversResponse';
-	for (var id in servers) {
-		if (!servers.hasOwnProperty(id)) {
-			continue;
-		}
-		var server = servers[id];
-		var octets = server.addr.split('.').map(function (n) {
-			return parseInt(n, 10);
-		});
-		msg += '\\';
-		msg += String.fromCharCode(octets[0] & 0xff);
-		msg += String.fromCharCode(octets[1] & 0xff);
-		msg += String.fromCharCode(octets[2] & 0xff)
-		msg += String.fromCharCode(octets[3] & 0xff);
-		msg += String.fromCharCode((server.port & 0xff00) >> 8);
-		msg += String.fromCharCode(server.port & 0xff);
-	}
-	msg += '\\EOT';
+function parseInfoString (str) {
+  const info = {};
+  const split = str.split('\\');
 
-	logger.info(conn.addr + ':' + conn.port + ' <--- getserversResponse with ' + Object.keys(servers).length + ' server(s)');
+  // force to even
+  split.length &= ~1;
 
-	var buffer = formatOOB(msg);
-	conn.socket.send(buffer, { binary: true });
+  for (let i = 0; i < split.length - 1; i += 2) {
+    info[split[i]] = split[i + 1];
+  }
+
+  return info;
 }
 
-/**********************************************************
- *
- * servers
- *
- **********************************************************/
-function serverid(addr, port) {
-	return addr + ':' + port;
+function buildChallenge () {
+  const CHALLENGE_CHARS = [
+    '!', '#', '$', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', '<', '=', '>', '?', '@',
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+    '[', ']', '^', '_', '`',
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+    '{', '|', '}', '~'
+  ];
+
+  let challenge = '';
+  let length = CHALLENGE_MIN_LENGTH - 1;
+
+  length += parseInt(Math.random() * (CHALLENGE_MAX_LENGTH - CHALLENGE_MIN_LENGTH + 1), 10);
+
+  for (let i = 0; i < length; i++) {
+    challenge += CHALLENGE_CHARS[Math.floor(Math.random() * CHALLENGE_CHARS.length)];
+  }
+
+  return challenge;
 }
 
-function updateServer(addr, port) {
-	var id = serverid(addr, port);
-	var server = servers[id];
-	if (!server) {
-		server = servers[id] = { addr: addr, port: port };
-	}
-	server.lastUpdate = Date.now();
+function sendGetInfo (session) {
+  const msg = buildChallenge();
 
-	// send partial update to all clients
-	for (var i = 0; i < clients.length; i++) {
-		sendGetServersResponse(clients[i], { id: server });
-	}
+  const buffer = Uint8Array.from(`\xff\xff\xff\xffgetinfo ${msg}\x00`, x => x.charCodeAt(0));
+  console.log(`${session.addr}:${session.port} <--- ${prettyOOB(buffer)}`);
+  session.write(buffer);
 }
 
-function removeServer(id) {
-	var server = servers[id];
+function sendGetServersResponse (session, servers) {
+  let msg = '';
+  for (const server of Object.values(servers)) {
+    const octets = server.addr.split('.').map(x => parseInt(x, 10));
 
-	delete servers[id];
+    msg += '\\';
+    msg += String.fromCharCode(octets[0] & 0xff);
+    msg += String.fromCharCode(octets[1] & 0xff);
+    msg += String.fromCharCode(octets[2] & 0xff);
+    msg += String.fromCharCode(octets[3] & 0xff);
+    msg += String.fromCharCode((server.port & 0xff00) >> 8);
+    msg += String.fromCharCode((server.port & 0x00ff) >> 0);
+  }
+  msg += '\\EOT';
 
-	logger.info(server.addr + ':' + server.port + ' timed out, ' + Object.keys(servers).length + ' server(s) currently registered');
+  const buffer = Uint8Array.from(`\xff\xff\xff\xffgetserversResponse ${msg}\x00`, x => x.charCodeAt(0));
+  console.log(`${session.addr}:${session.port} <--- ${prettyOOB(buffer)}`);
+  session.write(buffer);
 }
 
-function pruneServers() {
-	var now = Date.now();
+function handleInfoResponse (session, data) {
+  const info = parseInfoString(data);
 
-	for (var id in servers) {
-		if (!servers.hasOwnProperty(id)) {
-			continue;
-		}
-
-		var server = servers[id];
-		var delta = now - server.lastUpdate;
-
-		if (delta > pruneInterval) {
-			removeServer(id);
-		}
-	}
+  updateServer(session.addr, session.port, info);
 }
 
-/**********************************************************
- *
- * clients
- *
- **********************************************************/
-function handleSubscribe(conn) {
-	addClient(conn);
-
-	// send all servers upon subscribing
-	sendGetServersResponse(conn, servers);
+function handleHeartbeat (session, data) {
+  sendGetInfo(session);
 }
 
-function addClient(conn) {
-	var idx = clients.indexOf(conn);
-
-	if (idx !== -1) {
-		return;  // already subscribed
-	}
-
-	logger.info(conn.addr + ':' + conn.port + ' ---> subscribe');
-
-	clients.push(conn);
+function handleGetServers (session, data) {
+  sendGetServersResponse(session, servers);
 }
 
-function removeClient(conn) {
-	var idx = clients.indexOf(conn);
-	if (idx === -1) {
-		return;  // conn may have belonged to a server
-	}
-
-	var conn = clients[idx];
-
-	logger.info(conn.addr + ':' + conn.port + ' ---> unsubscribe');
-
-	clients.splice(idx, 1);
+function handleEmscriptenPort (session, data) {
+  session.port = parseInt(data, 10);
 }
 
-/**********************************************************
- *
- * main
- *
- **********************************************************/
-function getRemoteAddress(ws) {
-	// by default, check the underlying socket's remote address
-	var address = ws._socket.remoteAddress;
+/* ---------------------------------------------------------------------------------------------- */
 
-	// if this is an x-forwarded-for header (meaning the request
-	// has been proxied), use it
-	if (ws.upgradeReq.headers['x-forwarded-for']) {
-		address = ws.upgradeReq.headers['x-forwarded-for'];
-	}
+const port = parseInt(args.values.port);
+const cert = await fs.readFile(args.values.cert);
+const key = await fs.readFile(args.values.key);
+const secret = crypto.randomBytes(16).toString('hex');
 
-	return address;
-}
+const h3 = new Http3Server({
+  host: '0.0.0.0',
+  port,
+  secret,
+  cert,
+  privKey: key
+});
 
-function getRemotePort(ws) {
-	var port = ws._socket.remotePort;
+h3.startServer();
 
-	if (ws.upgradeReq.headers['x-forwarded-port']) {
-		port = ws.upgradeReq.headers['x-forwarded-port'];
-	}
+h3.ready.then(async () => {
+  const sessionStream = await h3.sessionStream('/');
+  const sessionReader = sessionStream.getReader();
 
-	return port;
-}
+  console.log(`listening on ${h3.host}:${h3.port}`);
 
-function connection(ws) {
-	this.socket = ws;
-	this.addr = getRemoteAddress(ws);
-	this.port = getRemotePort(ws);
-}
+  while (true) {
+    const { done, value } = await sessionReader.read();
+    const session = value;
 
-function loadConfig(configPath) {
-	var config = {
-		port: 27950
-	};
+    if (done) {
+      break;
+    }
 
-	try {
-		console.log('Loading config file from ' + configPath + '..');
-		var data = require(configPath);
-		_.extend(config, data);
-	} catch (e) {
-		console.log('Failed to load config', e);
-	}
+    session.ready.then(async () => {
+      const reader = session.datagrams.readable.getReader();
+      const writer = session.datagrams.writable.getWriter();
+      const [addr, port] = session.peerAddress.split(':');
+      let first = true;
 
-	return config;
-}
+      session.addr = addr;
+      session.port = port;
 
-(function main() {
-	var server = http.createServer();
+      session.write = (data) => {
+        writer.write(data);
+      };
 
-	var wss = new WebSocketServer({
-		server: server
-	});
+      while (true) {
+        const { done, value } = await reader.read();
 
-	wss.on('connection', function (ws) {
-		var conn = new connection(ws);
-		var first = true;
+        if (done) {
+          return;
+        }
 
-		ws.on('message', function (buffer, flags) {
-			if (!flags.binary) {
-				return;
-			}
+        console.log(`${session.addr}:${session.port} ---> ${prettyOOB(value)}`);
 
-                        // node Buffer to ArrayBuffer
-                        var view = Uint8Array.from(buffer);
-                        var buffer = view.buffer;
+        const msg = String.fromCharCode.apply(null, value);
 
-                        // check to see if this is emscripten's port identifier message
-                        var wasfirst = first;
-                        first = false;
-                        if (wasfirst &&
-                                view.byteLength === 10 &&
-                                view[0] === 255 && view[1] === 255 && view[2] === 255 && view[3] === 255 &&
-                                view[4] === 'p'.charCodeAt(0) && view[5] === 'o'.charCodeAt(0) && view[6] === 'r'.charCodeAt(0) && view[7] === 't'.charCodeAt(0)) {
-                                conn.port = ((view[8] << 8) | view[9]);
-                                return;
-                        }
+        if (first && msg.startsWith('\xff\xff\xff\xffport')) {
+          handleEmscriptenPort(session, msg.substr(9));
+        } else if (msg.startsWith('\xff\xff\xff\xffgetservers')) {
+          handleGetServers(session, msg.substr(15));
+        } else if (msg.startsWith('\xff\xff\xff\xffheartbeat')) {
+          handleHeartbeat(session, msg.substr(14));
+        } else if (msg.startsWith('\xff\xff\xff\xffinfoResponse')) {
+          handleInfoResponse(session, msg.substr(18));
+        } else if (msg.startsWith('\xff\xff\xff\xffsubscribe')) {
+          handleSubscribe(session);
+        } else {
+          console.error(`unexpected message '${msg}'`);
+        }
 
-			var msg = stripOOB(buffer);
-			if (!msg) {
-				removeClient(conn);
-				return;
-			}
+        first = false;
+      }
+    }).catch((e) => {
+      console.error(`Stream error, peer ${session.addr}:${session.port}`, e);
+    });
 
-			if (msg.indexOf('getservers ') === 0) {
-				handleGetServers(conn, msg.substr(11));
-			} else if (msg.indexOf('heartbeat ') === 0) {
-				handleHeartbeat(conn, msg.substr(10));
-			} else if (msg.indexOf('infoResponse\n') === 0) {
-				handleInfoResponse(conn, msg.substr(13));
-			} else if (msg.indexOf('subscribe') === 0) {
-				handleSubscribe(conn);
-			} else {
-				console.error('unexpected message "' + msg + '"');
-			}
-		});
+    session.closed.catch((e) => {
+      console.error(`Stream error, peer ${session.addr}:${session.port}`, e);
+    }).finally(() => {
+      removeClient(session);
+    });
+  }
+}).catch((e) => {
+  console.error(e);
+});
 
-		ws.on('error', function (err) {
-			removeClient(conn);
-		});
-
-		ws.on('close', function () {
-			removeClient(conn);
-		});
-	});
-
-	// listen only on 0.0.0.0 to force ipv4
-        server.listen(config.port, '0.0.0.0',  function() {
-                console.log('master server is listening on port ' + server.address().port);
-        });
-
-	setInterval(pruneServers, pruneInterval);
-})();
+setInterval(pruneServers, SERVER_PRUNE_INTERVAL);

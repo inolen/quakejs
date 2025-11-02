@@ -1,171 +1,122 @@
-var _ = require('underscore');
-var async = require('async');
-var crc32 = require('buffer-crc32');
-var express = require('express');
-var fs = require('fs');
-var http = require('http');
-var logger = require('winston');
-var opt = require('optimist');
-var path = require('path');
-var send = require('send');
-var wrench = require('wrench');
-var zlib = require('zlib');
+import crc32 from 'crc/crc32';
+import express from 'express';
+import fs from 'node:fs/promises';
+import https from 'https';
+import pak from '../lib/pak.js';
+import path from 'path';
+import util from 'util';
 
-var argv = require('optimist')
-	.describe('config', 'Location of the configuration file').default('config', './config.json')
-	.argv;
+/* process command line */
+let args;
 
-if (argv.h || argv.help) {
-	opt.showHelp();
-	return;
+try {
+  args = util.parseArgs({
+    options: {
+      help: { type: 'boolean' },
+      data: { type: 'string' },
+      cert: { type: 'string' },
+      key: { type: 'string' },
+      port: { type: 'string', default: '8081' }
+    }
+  });
+
+  if (args.values.help) {
+    throw new Error();
+  }
+
+  if (!args.values.data) {
+    throw new Error('Missing required argument --data');
+  }
+
+  if (!args.values.cert) {
+    throw new Error('Missing required argument --cert');
+  }
+
+  if (!args.values.key) {
+    throw new Error('Missing required argument --key');
+  }
+} catch (e) {
+  console.error('Usage: content.js --data <path> --cert <cert.pem> --key <key.pem> [--port <num>]');
+
+  if (e.message) {
+    console.error();
+    console.error(e.message);
+  }
+
+  process.exit(1);
 }
 
-logger.cli();
-logger.level = 'debug';
+/* generate manifest(s) */
+const datapath = path.resolve(args.values.data);
+const dataents = await fs.readdir(datapath, { withFileTypes: true });
 
-var config = loadConfig(argv.config);
-var validAssets = ['.pk3', '.run', '.sh'];
-var currentManifestTimestamp;
-var currentManifest;
+const installers = {};
+const games = {};
 
-function getAssets() {
-	return wrench.readdirSyncRecursive(config.root).filter(function (file) {
-		var ext = path.extname(file);
-		return validAssets.indexOf(ext) !== -1;
-	}).map(function (file) {
-		return path.join(config.root, file);
-	});
+for (const ent of dataents) {
+  if (ent.isFile()) {
+    const tarpath = path.join(datapath, ent.name);
+    const crc = crc32(await fs.readFile(tarpath));
+
+    installers[ent.name] = crc.toString(16).padStart(8, '0');
+  } else if (ent.isDirectory() && ent.name !== 'baseq3') {
+    const game = ent.name;
+    const gamepath = path.join(datapath, game);
+    const gameents = await fs.readdir(gamepath);
+    const gamepaks = gameents.filter(x => x.toLowerCase().endsWith('.pk3'));
+
+    games[game] = {};
+
+    for (const pakname of gamepaks) {
+      const pakpath = path.join(gamepath, pakname);
+      const pakdata = await fs.readFile(pakpath);
+      const paksum = pak.checksum(pakdata);
+
+      games[game][pakname] = paksum.toString(16).padStart(8, '0');
+    }
+  }
 }
 
-function generateManifest(callback) {
-	logger.info('generating manifest from ' + config.root);
-
-	var assets = getAssets();
-	var start = Date.now();
-
-	async.map(assets, function (file, cb) {
-		logger.info('processing ' + file);
-
-		var name = path.relative(config.root, file);
-		var crc = crc32.unsigned('');
-		var compressed = 0;
-		var size = 0;
-
-		// stream each file in, generating a hash for it's original
-		// contents, and gzip'ing the buffer to determine the compressed
-		// length for the client so it can present accurate progress info
-		var stream = fs.createReadStream(file);
-
-		// gzip the file contents to determine the compressed length
-		// of the file so the client can present correct progress info
-		var gzip = zlib.createGzip();
-
-		stream.on('error', function (err) {
-			callback(err);
-		});
-		stream.on('data', function (data) {
-			crc = crc32.unsigned(data, crc);
-			size += data.length;
-			gzip.write(data);
-		});
-		stream.on('end', function () {
-			gzip.end();
-		});
-
-		gzip.on('data', function (data) {
-			compressed += data.length;
-		});
-		gzip.on('end', function () {
-			cb(null, {
-				name: name,
-				compressed: compressed,
-				checksum: crc
-			});
-		});
-	}, function (err, entries) {
-		if (err) return callback(err);
-		logger.info('generated manifest (' + entries.length + ' entries) in ' + ((Date.now() - start) / 1000) + ' seconds');
-
-		callback(err, entries);
-	});
+/* sanity check installers */
+if (installers['linuxq3ademo-1.11-6.x86.gz.sh'] !== '3322a4f8') {
+  console.error(`Invalid crc or missing linuxq3ademo-1.11-6.x86.gz.sh in ${datapath}`);
+  process.exit(1);
 }
 
-function handleManifest(req, res, next) {
-	logger.info('serving manifest to ' + req.ip);
-
-	res.setHeader('Cache-Control', 'public, max-age=60, must-revalidate');
-	res.setHeader('Last-Modified', currentManifestTimestamp.toUTCString());
-
-	res.json(currentManifest);
+if (installers['linuxq3apoint-1.32b-3.x86.run'] !== '11b179b7') {
+  console.error(`Invalid crc or missing linuxq3apoint-1.32b-3.x86.run in ${datapath}`);
+  process.exit(1);
 }
 
-function handleAsset(req, res, next) {
-	var basedir = req.params[0];
-	var checksum = parseInt(req.params[1], 10);
-	var basename = req.params[2];
-	var relativePath = path.join(basedir, basename);
-	var absolutePath = path.join(config.root, relativePath);
+/* setup app */
+const app = express();
 
-	// make sure they're requesting a valid asset
-	var asset;
-	for (var i = 0; i < currentManifest.length; i++) {
-		var entry = currentManifest[i];
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+});
 
-		if (entry.name === relativePath && entry.checksum === checksum) {
-			asset = entry;
-			break;
-		}
-	}
-
-	if (!asset) {
-		res.status(400).end();
-		return;
-	}
-
-	logger.info('serving ' + relativePath + ' (crc32 ' + checksum + ') to ' + req.ip);
-
-	res.sendfile(absolutePath, { maxAge: Infinity });
+for (const installer in installers) {
+  app.get(`/${installer}`, (req, res) => res.sendFile(path.join(datapath, installer)));
 }
 
-function loadConfig(configPath) {
-	var config = {
-		root: path.join(__dirname, '..', 'assets'),
-		port: 9000
-	};
+for (const [game, manifest] of Object.entries(games)) {
+  app.get(`/${game}/manifest.json`, (req, res) => res.json(manifest));
 
-	try {
-		logger.info('loading config file from ' + configPath + '..');
-		var data = require(configPath);
-		_.extend(config, data);
-	} catch (e) {
-		logger.warn('failed to load config', e);
-	}
+  for (const [pakname, checksum] of Object.entries(manifest)) {
+    const pakprint = pakname.replace('.pk3', `.${checksum}.pk3`);
 
-	return config;
+    app.get(`/${game}/${pakprint}`, (req, res) => res.sendFile(path.join(datapath, game, pakname)));
+  }
 }
 
-(function main() {
-	var app = express();
-	app.use(function (req, res, next) {
-		res.setHeader('Access-Control-Allow-Origin', '*');
-		next();
-	});
-	app.use(express.compress({ filter: function(req, res) { return true; } }));
-	app.get('/assets/manifest.json', handleManifest);
-	app.get(/^\/assets\/(.+\/|)(\d+)-(.+?)$/, handleAsset);
+/* startup server */
+const port = parseInt(args.values.port);
+const server = https.createServer({
+  cert: await fs.readFile(args.values.cert),
+  key: await fs.readFile(args.values.key)
+}, app);
 
-	// generate an initial manifest
-	generateManifest(function (err, manifest) {
-		if (err) throw err;
-
-		currentManifestTimestamp = new Date();
-		currentManifest = manifest;
-
-		// start listening
-		var server = http.createServer(app);
-
-		server.listen(config.port, function () {
-			logger.info('content server is now listening on port', server.address().address, server.address().port);
-		});
-	});
-})();
+server.listen(port, () => {
+  console.log(`listening on ${server.address().address}:${server.address().port}`);
+});

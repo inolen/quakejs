@@ -1,10 +1,14 @@
 {
   "name": "quakejs",
+  "type": "module",
   "version": "0.0.1",
   "bin": {
     "quakejs-content": "bin/content.js",
     "quakejs-master": "bin/master.js",
     "quakejs-repak": "bin/repak.js"
+  },
+  "scripts": {
+    "lint": "semistandard --fix bin/*.js lib/*.js | snazzy"
   },
   "repository": {
     "type": "git",
@@ -14,18 +18,19 @@
   "license": "MIT",
   "readmeFilename": "README.md",
   "dependencies": {
-    "async": "~0.2.9",
-    "buffer-crc32": "~0.2.1",
-    "ejs": "~0.8.4",
-    "execSync": "~1.0.1-pre",
-    "express": "~3.3.5",
-    "optimist": "~0.6.0",
-    "quakejs-files": "0.0.3",
-    "send": "^0.16.2",
-    "temp": "~0.5.1",
-    "underscore": "~1.5.1",
-    "winston": "2.4.0",
-    "wrench": "~1.5.4",
-    "ws": "~0.4.29"
+    "@fails-components/webtransport": "^1.4.4",
+    "@fails-components/webtransport-transport-http3-quiche": "^1.4.4",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "adm-zip": "^0.5.16",
+    "bit-buffer": "^0.3.0",
+    "crc": "^4.3.2",
+    "ejs": "^3.1.10",
+    "express": "~5.1.0",
+    "fetch-retry": "^6.0.0",
+    "minimatch": "^10.0.3"
+  },
+  "devDependencies": {
+    "semistandard": "^17.0.0",
+    "snazzy": "^9.0.0"
   }
 }
