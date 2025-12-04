@@ -1,6 +1,6 @@
 # QuakeJS
 
-QuakeJS is a port of [ioquake3](http://www.ioquake3.org) to JavaScript with the help of [Emscripten](http://github.com/kripken/emscripten).
+QuakeJS is a part of [ioquake3](http://www.ioquake3.org) to JavaScript with the help of [Emscripten](http://github.com/kripken/emscripten).
 
 To see a live demo, check out [http://www.quakejs.com](http://www.quakejs.com).
 
