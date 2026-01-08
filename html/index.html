@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>QuakeJS Local</title>
+		<link rel="stylesheet" href="game.css"></link>
+		<script type="text/javascript" src="ioquake3.js"></script>
+		<link rel="apple-touch-icon" sizes="57x57" href="/apple-icon-57x57.png">
+		<link rel="apple-touch-icon" sizes="60x60" href="/apple-icon-60x60.png">
+		<link rel="apple-touch-icon" sizes="72x72" href="/apple-icon-72x72.png">
+		<link rel="apple-touch-icon" sizes="76x76" href="/apple-icon-76x76.png">
+		<link rel="apple-touch-icon" sizes="114x114" href="/apple-icon-114x114.png">
+		<link rel="apple-touch-icon" sizes="120x120" href="/apple-icon-120x120.png">
+		<link rel="apple-touch-icon" sizes="144x144" href="/apple-icon-144x144.png">
+		<link rel="apple-touch-icon" sizes="152x152" href="/apple-icon-152x152.png">
+		<link rel="apple-touch-icon" sizes="180x180" href="/apple-icon-180x180.png">
+		<link rel="icon" type="image/png" sizes="192x192"  href="/android-icon-192x192.png">
+		<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+		<link rel="manifest" href="/manifest.json">
+		<meta name="msapplication-TileColor" content="#ffffff">
+		<meta name="msapplication-TileImage" content="/ms-icon-144x144.png">
+		<meta name="theme-color" content="#ffffff">
+		<!-- <script type="text/javascript">
+			var _gaq = _gaq || [];
+			_gaq.push(['_setAccount', 'UA-37328221-1']);
+			_gaq.push(['_trackPageview']);
+			(function() {
+				var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+				ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+				var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+			})();
+		</script> -->
+		<script type="text/javascript">
+			function getQueryCommands() {
+				var search = /([^&=]+)/g;
+				var query  = window.location.search.substring(1);
+
+				var args = [];
+
+				var match;
+				while (match = search.exec(query)) {
+					var val = decodeURIComponent(match[1]);
+					val = val.split(' ');
+					val[0] = '+' + val[0];
+					args.push.apply(args, val);
+				}
+
+				return args;
+			}
+
+			window.onload = function () {
+				function resizeViewport() {
+					if (!ioq3.canvas) {
+						// ignore if the canvas hasn't yet initialized
+						return;
+					}
+					if ((document['webkitFullScreenElement'] || document['webkitFullscreenElement'] ||
+								document['mozFullScreenElement'] || document['mozFullscreenElement'] ||
+								document['fullScreenElement'] || document['fullscreenElement'])) {
+						// ignore resize events due to going fullscreen
+						return;
+					}
+					ioq3.setCanvasSize(ioq3.viewport.offsetWidth, ioq3.viewport.offsetHeight);
+				}
+
+				ioq3.viewport = document.getElementById('viewport-frame');
+				ioq3.elementPointerLock = true;
+				ioq3.exitHandler = function (err) {
+					if (err) {
+						var form = document.createElement('form');
+						form.setAttribute('method', 'POST');
+						form.setAttribute('action', '/');
+
+						var hiddenField = document.createElement('input');
+						hiddenField.setAttribute('type', 'hidden');
+						hiddenField.setAttribute('name', 'error');
+						hiddenField.setAttribute('value', err);
+						form.appendChild(hiddenField);
+
+						document.body.appendChild(form);
+						form.submit();
+						return;
+					}
+
+					window.location.href = '/';
+				}
+
+				window.addEventListener('resize', resizeViewport);
+
+				// merge default args with query string args
+				//var args = ['+set', 'fs_cdn', 'content.quakejs.com:80', '+set', 'sv_master1', 'master.quakejs.com:27950']; //original args to list the servers from master.quakejs.com
+				//var args = ['+set', 'fs_cdn', 'content.quakejs.com:80', '+set', 'sv_master1', 'master.quakejs.com:27950', '+connect', 'YOUR_SERVER_HERE:27960']; //additional +connect arguement to connect to a specific server
+				var args = ['+set', 'fs_cdn', 'quakejs:80', '+connect', 'quakejs:27960']; //custom args list targeting a local content server and local game server both at the address 'quakejs'
+				args.push.apply(args, getQueryCommands());
+				ioq3.callMain(args);
+			};
+		</script>
+	</head>
+	<body>
+		<div id="viewport-frame"></div>
+	</body>
+</html>
