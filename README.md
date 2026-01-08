@@ -129,6 +129,18 @@ Note: `./assets` is assumed to be the default asset directory. If you'd like to 
 
 Once the content server is available, you can use it by launching your local or dedicated server with `+set fs_cdn <server_address>`.
 
+## Running a local dedicated server, content server, and play page
+
+It is possible to run a QuakeJS server, Content Server, and Play Page entirely locally (for use on a LAN with no external internet connection required).
+
+Configure a dedicated local server as described above in **Running a dedicated server** and **baseq3 server, step-by-step**.
+
+Copy the files from `html` to your web server's root folder.  Run `html/get_assets.sh` to download files from http://content.quakejs.com.  Rename *quakejs* on line 77 of `html/index.html` to your server's hostname.
+
+Copy `init.d/quakejs` to `/etc/init.d/`, make it executable, and enable it by running `sudo update-rc.d quakejs defaults` (under Debian).
+
+*Step by step instructions can be found at https://steamforge.net/wiki/index.php/How_to_setup_a_local_QuakeJS_server_under_Debian_9*
+
 ## License
 
 MIT
