@@ -1,6 +1,6 @@
 {
   "name": "quakejs",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "bin": {
     "quakejs-content": "bin/content.js",
     "quakejs-master": "bin/master.js",
